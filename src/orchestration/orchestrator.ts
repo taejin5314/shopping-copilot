@@ -13,6 +13,8 @@ import type { RetailerAdapter } from "../core/adapter.js";
 import type { RagRetriever } from "../rag/retriever.js";
 import type { Synthesizer } from "../llm/synthesizer.js";
 import { fallbackAnswer } from "../llm/synthesizer.js";
+import type { LlmProvider } from "../llm/provider.js";
+import { extractSearchTerms } from "../llm/keyword-extractor.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
@@ -27,6 +29,8 @@ export interface OrchestratorConfig {
   retriever: RagRetriever;
   /** Optional LLM synthesizer. Falls back to deterministic answer if absent. */
   synthesizer?: Synthesizer;
+  /** Optional LLM provider for lightweight tasks (e.g. keyword extraction). */
+  llmProvider?: LlmProvider;
   maxStoreResults?: number;
 }
 
@@ -127,9 +131,17 @@ export async function handleQuery(
     if (intent.type === "unknown") {
       // If query text exists but intent is unrecognized (e.g. non-English),
       // try a product search as a best-effort fallback.
+      // If the original query contains non-ASCII characters AND we have an LLM,
+      // translate to English keywords first so the retailer API can understand.
+      let searchQuery = query;
+      if (config.llmProvider) {
+        const translated = await extractSearchTerms(query, config.llmProvider);
+        if (translated) searchQuery = translated;
+      }
+
       try {
         const products = await timed(
-          () => adapter.searchProducts(query, { countryCode, maxResults: 5 }),
+          () => adapter.searchProducts(searchQuery, { countryCode, maxResults: 5 }),
           "search_products",
           adapter.retailerId,
           toolCalls,

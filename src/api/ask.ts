@@ -6,6 +6,7 @@ import { CopilotError } from "../core/types.js";
 import type { RetailerAdapter } from "../core/adapter.js";
 import type { RagRetriever } from "../rag/retriever.js";
 import type { Synthesizer } from "../llm/synthesizer.js";
+import type { LlmProvider } from "../llm/provider.js";
 import { geocode } from "../domain/geocode.js";
 import type { GeocodeOptions } from "../domain/geocode.js";
 
@@ -26,6 +27,8 @@ export interface CopilotConfig {
   /** Additional retailers keyed by retailerId. */
   retailers?: Record<string, RetailerEntry>;
   synthesizer?: Synthesizer;
+  /** Optional LLM provider for lightweight tasks (e.g. keyword extraction). */
+  llmProvider?: LlmProvider;
   maxStoreResults?: number;
   /** Options forwarded to the geocoder (e.g. injectable fetch for tests). */
   geocodeOptions?: GeocodeOptions;
@@ -66,6 +69,7 @@ export async function ask(
     adapter,
     retriever,
     synthesizer: config.synthesizer,
+    llmProvider: config.llmProvider,
     maxStoreResults: config.maxStoreResults,
   };
 

@@ -12,6 +12,8 @@ const PORT = Number(process.env.PORT ?? 4000);
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:3000";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+const provider = ANTHROPIC_API_KEY ? new AnthropicProvider({ apiKey: ANTHROPIC_API_KEY }) : undefined;
+
 const config: CopilotConfig = {
   // Default retailer: IKEA
   adapter: new IkeaAdapter({ mcpBaseUrl: MCP_URL, apiKey: process.env.MCP_API_KEY }),
@@ -24,8 +26,9 @@ const config: CopilotConfig = {
     },
   },
   maxStoreResults: 5,
-  ...(ANTHROPIC_API_KEY && {
-    synthesizer: new LlmSynthesizer(new AnthropicProvider({ apiKey: ANTHROPIC_API_KEY })),
+  ...(provider && {
+    synthesizer: new LlmSynthesizer(provider),
+    llmProvider: provider,
   }),
 };
 
