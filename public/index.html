@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shopping Copilot</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f8f9fa;--card:#fff;--border:#dee2e6;--accent:#0d6efd;
+    --accent-hover:#0b5ed7;--text:#212529;--muted:#6c757d;
+    --success:#198754;--warn:#ffc107;--danger:#dc3545;
+    --radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  .container{max-width:820px;margin:0 auto;padding:24px 16px}
+  h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
+  .subtitle{color:var(--muted);font-size:.875rem;margin-bottom:24px}
+
+  /* ── Form ── */
+  .form-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:24px}
+  .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .form-row:last-child{margin-bottom:0}
+  .field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
+  .field-full{flex-basis:100%}
+  label{font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  input,select,textarea{border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.9rem;font-family:inherit;background:#fff;transition:border-color .15s}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{resize:vertical;min-height:64px}
+
+  .cart-hint{font-size:.75rem;color:var(--muted)}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:6px;padding:10px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover:not(:disabled){background:var(--accent-hover)}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Response ── */
+  .response{display:none}
+  .response.visible{display:block}
+  .section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
+  .section-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:8px}
+
+  .answer-text{font-size:1rem;white-space:pre-wrap}
+  .intent-badge{display:inline-block;background:var(--accent);color:#fff;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:12px;text-transform:uppercase;margin-bottom:8px}
+
+  /* Store cards */
+  .store-cards{display:flex;flex-direction:column;gap:10px}
+  .store-card{border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+  .store-rank{font-size:1.4rem;font-weight:700;color:var(--accent);min-width:28px}
+  .store-name{font-weight:600;flex:1;min-width:120px}
+  .store-score{font-size:.85rem;font-weight:600;background:var(--bg);padding:2px 8px;border-radius:4px}
+  .score-bar{display:flex;gap:8px;flex-basis:100%;flex-wrap:wrap}
+  .score-pill{font-size:.72rem;padding:2px 6px;border-radius:4px;background:#e9ecef;white-space:nowrap}
+  .item-detail{font-size:.8rem;color:var(--muted)}
+  .item-ok{color:var(--success)}
+  .item-miss{color:var(--danger)}
+
+  /* Explanation */
+  .explanation-list{list-style:disc;padding-left:20px;font-size:.85rem}
+  .explanation-list li{margin-bottom:2px}
+
+  /* Warnings */
+  .warning-box{background:#fff3cd;border:1px solid var(--warn);border-radius:6px;padding:10px 12px;font-size:.85rem;margin-bottom:8px}
+  .warning-box:last-child{margin-bottom:0}
+
+  /* Citations */
+  .citation{font-size:.85rem;margin-bottom:4px}
+  .citation a{color:var(--accent);text-decoration:none}
+  .citation a:hover{text-decoration:underline}
+
+  /* Tool calls (collapsible) */
+  details{font-size:.82rem}
+  details summary{cursor:pointer;font-weight:600;color:var(--muted);margin-bottom:6px}
+  .tool-row{display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid #f0f0f0}
+  .tool-name{font-weight:600;min-width:140px}
+  .tool-duration{color:var(--muted)}
+  .tool-ok{color:var(--success)}
+  .tool-fail{color:var(--danger)}
+
+  /* Error */
+  .error-box{background:#f8d7da;border:1px solid var(--danger);border-radius:6px;padding:12px;font-size:.9rem;color:#842029;margin-bottom:16px;display:none}
+  .error-box.visible{display:block}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Shopping Copilot</h1>
+  <p class="subtitle">Multi-retailer product availability &amp; recommendation engine</p>
+
+  <!-- ── Input Form ── -->
+  <div class="form-card">
+    <div class="form-row">
+      <div class="field field-full">
+        <label for="query">Query</label>
+        <textarea id="query" placeholder='e.g. "Is the KALLAX shelf 30275861 in stock near me?"' rows="2"></textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="retailer">Retailer</label>
+        <select id="retailer"><option value="">Auto-detect</option><option value="ikea">IKEA</option><option value="structube">Structube</option></select>
+      </div>
+      <div class="field">
+        <label for="country">Country</label>
+        <input id="country" type="text" maxlength="2" placeholder="US" />
+      </div>
+      <div class="field">
+        <label for="lat">Latitude</label>
+        <input id="lat" type="number" step="any" placeholder="43.65" />
+      </div>
+      <div class="field">
+        <label for="lng">Longitude</label>
+        <input id="lng" type="number" step="any" placeholder="-79.38" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field field-full">
+        <label for="cart">Cart <span class="cart-hint">(one per line: itemNo quantity — e.g. "30275861 2")</span></label>
+        <textarea id="cart" placeholder="30275861 2&#10;40351185 1" rows="2"></textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <button id="submit" class="btn btn-primary" type="button">Ask</button>
+    </div>
+  </div>
+
+  <!-- ── Error ── -->
+  <div id="error" class="error-box"></div>
+
+  <!-- ── Response ── -->
+  <div id="response" class="response">
+
+    <!-- Intent -->
+    <div class="section">
+      <span id="intent-badge" class="intent-badge"></span>
+      <div id="answer" class="answer-text"></div>
+    </div>
+
+    <!-- Warnings -->
+    <div id="warnings-section" class="section" style="display:none">
+      <div class="section-title">Warnings</div>
+      <div id="warnings"></div>
+    </div>
+
+    <!-- Recommendation -->
+    <div id="rec-section" class="section" style="display:none">
+      <div class="section-title">Store Rankings</div>
+      <div id="store-cards" class="store-cards"></div>
+      <div id="explanation" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Citations -->
+    <div id="citations-section" class="section" style="display:none">
+      <div class="section-title">Citations</div>
+      <div id="citations"></div>
+    </div>
+
+    <!-- Knowledge -->
+    <div id="knowledge-section" class="section" style="display:none">
+      <div class="section-title">Retrieved Knowledge</div>
+      <div id="knowledge"></div>
+    </div>
+
+    <!-- Tool Calls -->
+    <div id="tools-section" class="section" style="display:none">
+      <details>
+        <summary>Tool Calls</summary>
+        <div id="tools"></div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.getElementById(s);
+
+const submitBtn = $("submit");
+submitBtn.addEventListener("click", handleSubmit);
+$("query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+});
+
+async function handleSubmit() {
+  const query = $("query").value.trim();
+  if (!query) return;
+
+  // Build request body
+  const body = { query };
+  const retailer = $("retailer").value;
+  if (retailer) body.retailer = retailer;
+  const country = $("country").value.trim().toUpperCase();
+  if (country) body.countryCode = country;
+  const lat = parseFloat($("lat").value);
+  const lng = parseFloat($("lng").value);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) body.location = { lat, lng };
+  const cartLines = $("cart").value.trim().split("\n").filter(Boolean);
+  if (cartLines.length) {
+    body.cart = cartLines.map((line) => {
+      const [itemNo, qty] = line.trim().split(/\s+/);
+      return { itemNo, quantity: parseInt(qty, 10) || 1 };
+    });
+  }
+
+  // UI state: loading
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner"></span> Asking…';
+  $("error").classList.remove("visible");
+  $("response").classList.remove("visible");
+
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      throw new Error(errBody?.message ?? `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    renderResponse(data);
+  } catch (err) {
+    $("error").textContent = err.message;
+    $("error").classList.add("visible");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = "Ask";
+  }
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderResponse(r) {
+  // Intent badge
+  $("intent-badge").textContent = r.intent?.type ?? "unknown";
+
+  // Answer
+  $("answer").textContent = r.answer ?? "";
+
+  // Warnings
+  const allWarnings = [
+    ...(r.warnings ?? []),
+    ...(r.recommendation?.warnings ?? []),
+  ];
+  if (allWarnings.length) {
+    $("warnings").innerHTML = allWarnings.map((w) => `<div class="warning-box">${esc(w)}</div>`).join("");
+    $("warnings-section").style.display = "";
+  } else {
+    $("warnings-section").style.display = "none";
+  }
+
+  // Recommendation
+  if (r.recommendation?.ranked?.length) {
+    const cards = r.recommendation.ranked.map((s, i) => {
+      const pills = [
+        `Stock ${pct(s.stockCoverageScore)}`,
+        `Convenience ${pct(s.convenienceScore)}`,
+        s.distanceScore != null ? `Distance ${pct(s.distanceScore)}` : null,
+        s.priceScore != null ? `Price ${pct(s.priceScore)}` : null,
+      ].filter(Boolean);
+      const items = (s.itemDetails ?? []).map((d) =>
+        `<span class="item-detail ${d.sufficient ? "item-ok" : "item-miss"}">${esc(d.itemNo)}: ${d.available ?? "?"}/${d.requested}</span>`
+      ).join(" &nbsp; ");
+      return `<div class="store-card">
+        <span class="store-rank">#${i + 1}</span>
+        <span class="store-name">${esc(s.store?.label ?? s.store?.storeId ?? "?")}</span>
+        <span class="store-score">${pct(s.totalScore)}</span>
+        <div class="score-bar">${pills.map((p) => `<span class="score-pill">${esc(p)}</span>`).join("")}</div>
+        ${items ? `<div class="score-bar">${items}</div>` : ""}
+      </div>`;
+    }).join("");
+    $("store-cards").innerHTML = cards;
+
+    const pts = r.recommendation.explanationPoints ?? [];
+    if (pts.length) {
+      $("explanation").innerHTML = `<ul class="explanation-list">${pts.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+    } else {
+      $("explanation").innerHTML = "";
+    }
+    $("rec-section").style.display = "";
+  } else {
+    $("rec-section").style.display = "none";
+  }
+
+  // Citations
+  if (r.citations?.length) {
+    $("citations").innerHTML = r.citations.map((c) =>
+      c.url
+        ? `<div class="citation"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a></div>`
+        : `<div class="citation">${esc(c.label)}</div>`
+    ).join("");
+    $("citations-section").style.display = "";
+  } else {
+    $("citations-section").style.display = "none";
+  }
+
+  // Retrieved Knowledge
+  if (r.retrievedKnowledge?.length) {
+    $("knowledge").innerHTML = r.retrievedKnowledge.map((k) =>
+      `<div style="margin-bottom:8px"><strong>${esc(k.title)}</strong> <span class="score-pill">${pct(k.score)}</span><br/><span style="font-size:.85rem">${esc(k.content)}</span></div>`
+    ).join("");
+    $("knowledge-section").style.display = "";
+  } else {
+    $("knowledge-section").style.display = "none";
+  }
+
+  // Tool Calls
+  if (r.toolCallsUsed?.length) {
+    $("tools").innerHTML = r.toolCallsUsed.map((t) =>
+      `<div class="tool-row">
+        <span class="tool-name">${esc(t.tool)}</span>
+        <span class="${t.success ? "tool-ok" : "tool-fail"}">${t.success ? "✓" : "✗"}</span>
+        <span class="tool-duration">${t.durationMs}ms</span>
+        <span style="color:var(--muted);font-size:.75rem">[${esc(t.retailer)}]</span>
+      </div>`
+    ).join("");
+    $("tools-section").style.display = "";
+  } else {
+    $("tools-section").style.display = "none";
+  }
+
+  $("response").classList.add("visible");
+}
+
+function pct(n) {
+  return n == null ? "—" : (n * 100).toFixed(0) + "%";
+}
+</script>
+</body>
+</html>

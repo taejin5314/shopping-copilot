@@ -1,4 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ask } from "./ask.js";
 import type { CopilotConfig } from "./ask.js";
 import { CopilotError } from "../core/types.js";
@@ -6,6 +9,12 @@ import { CopilotError } from "../core/types.js";
 // ──────────────────────────────────────────────
 // Thin HTTP transport — POST /ask + GET /health
 // ──────────────────────────────────────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const INDEX_HTML = readFileSync(
+  resolve(__dirname, "../../public/index.html"),
+  "utf-8",
+);
 
 const BODY_LIMIT = 256 * 1024; // 256 KB
 
@@ -44,6 +53,13 @@ export function createHttpServer(config: CopilotConfig) {
     const url = req.url ?? "";
 
     try {
+      if (url === "/" && method === "GET") {
+        res
+          .writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+          .end(INDEX_HTML);
+        return;
+      }
+
       if (url === "/health" && method === "GET") {
         sendJson(res, 200, { status: "ok" });
         return;
