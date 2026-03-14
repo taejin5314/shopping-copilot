@@ -213,6 +213,7 @@ export class IkeaAdapter implements RetailerAdapter {
       price: p.salesPrice ? { amount: p.salesPrice.amount, currency: p.salesPrice.currencyCode } : null,
       url: p.pipUrl,
       measureText: p.measureText ?? null,
+      designText: p.designText ?? null,
     };
   }
 

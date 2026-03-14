@@ -225,6 +225,7 @@ export class StructubeAdapter implements RetailerAdapter {
       },
       url: `https://www.structube.com/en_ca/${p.url_key}${p.url_suffix ?? ""}`,
       measureText: null,
+      designText: null,
     };
   }
 }

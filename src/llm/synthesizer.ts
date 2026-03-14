@@ -46,6 +46,14 @@ export class LlmSynthesizer implements Synthesizer {
   }
 }
 
+/** Format a product name with its color/variant and size info when available. */
+function formatProductName(p: ProductInfo): string {
+  const extras: string[] = [];
+  if (p.designText) extras.push(p.designText);
+  if (p.measureText) extras.push(p.measureText);
+  return extras.length > 0 ? `${p.name} — ${extras.join(", ")}` : p.name;
+}
+
 /**
  * Deterministic fallback — same logic as the original buildAnswer.
  * Used when no LLM is configured or when the LLM call fails.
@@ -53,14 +61,29 @@ export class LlmSynthesizer implements Synthesizer {
 export function fallbackAnswer(input: SynthesisInput): string {
   const parts: string[] = [];
   const { recommendation, knowledge, warnings } = input;
+  const productMap = new Map((input.products ?? []).map((p) => [p.itemNo, p]));
 
   if (recommendation && recommendation.ranked.length > 0) {
     parts.push(...recommendation.explanationPoints);
     const best = recommendation.ranked[0];
     const itemSummary = best.itemDetails
-      .map((d) => `  - ${d.itemNo}: ${d.sufficient ? `${d.available} in stock (sufficient)` : `${d.available ?? 0} in stock (insufficient)`}`)
+      .map((d) => {
+        const product = productMap.get(d.itemNo);
+        // Always include SKU to distinguish variants with the same product name
+        const nameLabel = product
+          ? `${formatProductName(product)} (${d.itemNo})`
+          : d.itemNo;
+        return `  - ${nameLabel}: ${d.sufficient ? `${d.available} in stock ✓` : `${d.available ?? 0} in stock ✗`}`;
+      })
       .join("\n");
     parts.push(`Top store: ${best.store.label}\n${itemSummary}`);
+
+    if (recommendation.ranked.length > 1) {
+      parts.push("Other options:");
+      for (const s of recommendation.ranked.slice(1)) {
+        parts.push(`  ${s.store.label} — ${(s.totalScore * 100).toFixed(0)}% match`);
+      }
+    }
   }
 
   if (knowledge.length > 0) {
@@ -74,8 +97,9 @@ export function fallbackAnswer(input: SynthesisInput): string {
   if (products.length > 0) {
     parts.push("Matching products:");
     for (const p of products) {
+      const label = formatProductName(p);
       const price = p.price ? ` — ${p.price.currency} ${p.price.amount}` : "";
-      parts.push(`  - ${p.name} (${p.itemNo})${price}`);
+      parts.push(`  - ${label} (${p.itemNo})${price}`);
       if (p.url) parts.push(`    ${p.url}`);
     }
   }
@@ -140,8 +164,9 @@ function buildPrompt(input: SynthesisInput): LlmMessage[] {
   if (products.length > 0) {
     evidenceParts.push("\n## Product Search Results");
     for (const p of products) {
+      const label = [p.name, p.designText, p.measureText].filter(Boolean).join(" — ");
       const price = p.price ? ` — ${p.price.currency} ${p.price.amount}` : "";
-      evidenceParts.push(`- ${p.name} (${p.itemNo})${price}${p.url ? ` [link](${p.url})` : ""}`);
+      evidenceParts.push(`- ${label} (${p.itemNo})${price}${p.url ? ` [link](${p.url})` : ""}`);
     }
   }
 

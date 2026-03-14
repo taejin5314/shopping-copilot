@@ -31,6 +31,7 @@ export interface CopilotConfig {
   /** Optional LLM provider for lightweight tasks (e.g. keyword extraction). */
   llmProvider?: LlmProvider;
   maxStoreResults?: number;
+  maxProductResults?: number;
   /** Options forwarded to the geocoder (e.g. injectable fetch for tests). */
   geocodeOptions?: GeocodeOptions;
 }
@@ -124,6 +125,7 @@ async function queryAll(
         synthesizer: config.synthesizer,
         llmProvider: config.llmProvider,
         maxStoreResults: config.maxStoreResults,
+        maxProductResults: config.maxProductResults,
       }, context).catch((err) => {
         console.error(`[ask] ${entry.adapter.retailerId} failed:`, err);
         return null;
@@ -155,10 +157,19 @@ async function queryAll(
     return true;
   });
 
+  // Merge products from individual responses, dedup by retailer+itemNo
+  const seenProductKeys = new Set<string>();
+  const products = valid.flatMap((r) => r.products ?? []).filter((p) => {
+    const key = `${p.retailer}:${p.itemNo}`;
+    if (seenProductKeys.has(key)) return false;
+    seenProductKeys.add(key);
+    return true;
+  });
+
   const answer = config.synthesizer
-    ? await config.synthesizer.synthesize({ query, intent: base.intent, recommendation, knowledge, products: [], warnings })
-        .catch(() => fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products: [], warnings }))
-    : fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products: [], warnings });
+    ? await config.synthesizer.synthesize({ query, intent: base.intent, recommendation, knowledge, products, warnings })
+        .catch(() => fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products, warnings }))
+    : fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products, warnings });
 
   return {
     intent: base.intent,
@@ -167,6 +178,7 @@ async function queryAll(
     recommendation,
     answer,
     citations,
+    products,
     warnings,
   };
 }

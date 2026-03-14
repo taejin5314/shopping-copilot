@@ -32,6 +32,7 @@ export interface OrchestratorConfig {
   /** Optional LLM provider for lightweight tasks (e.g. keyword extraction). */
   llmProvider?: LlmProvider;
   maxStoreResults?: number;
+  maxProductResults?: number;
 }
 
 export interface QueryContext {
@@ -43,6 +44,16 @@ export interface QueryContext {
   location?: GeoCoord;
   /** Pre-parsed cart items (skip extraction from query). */
   cart?: CartItem[];
+}
+
+/** Build a descriptive citation label that distinguishes product variants. */
+function productCitationLabel(p: ProductInfo): string {
+  const extras: string[] = [];
+  if (p.designText) extras.push(p.designText);
+  if (p.measureText) extras.push(p.measureText);
+  if (extras.length > 0) return `${p.name} — ${extras.join(", ")}`;
+  // No variant info available — append SKU so same-named variants are distinguishable
+  return `${p.name} (${p.itemNo})`;
 }
 
 export async function handleQuery(
@@ -123,13 +134,13 @@ export async function handleQuery(
     if (intent.type === "product_info" && intent.itemNos.length > 0) {
       // Delegate to search — lightweight for now
       foundProducts = await timed(
-        () => adapter.searchProducts(intent.itemNos[0], { countryCode }),
+        () => adapter.searchProducts(intent.itemNos[0], { countryCode, maxResults: config.maxProductResults ?? 3 }),
         "search_products",
         adapter.retailerId,
         toolCalls,
       );
       if (foundProducts.length > 0) {
-        citations.push({ label: foundProducts[0].name, url: foundProducts[0].url });
+        citations.push({ label: productCitationLabel(foundProducts[0]), url: foundProducts[0].url });
       }
     }
 
@@ -151,7 +162,7 @@ export async function handleQuery(
       try {
         console.error(`[orchestrator] product search fallback query: "${searchQuery}"`);
         const products = await timed(
-          () => adapter.searchProducts(searchQuery, { countryCode, maxResults: 5 }),
+          () => adapter.searchProducts(searchQuery, { countryCode, maxResults: config.maxProductResults ?? 3 }),
           "search_products",
           adapter.retailerId,
           toolCalls,
@@ -161,7 +172,7 @@ export async function handleQuery(
           intent.type = "product_info";
           foundProducts = products;
           for (const p of products) {
-            if (p.url) citations.push({ label: p.name, url: p.url });
+            if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
           }
           // Auto-rank stores for the found products so the user gets a recommendation,
           // not just a flat product list. Limit to top 3 products to avoid excess API calls.
@@ -202,6 +213,7 @@ export async function handleQuery(
       recommendation,
       answer,
       citations,
+      products: foundProducts.length > 0 ? foundProducts : undefined,
       warnings,
     };
   } catch (err) {

@@ -19,6 +19,8 @@ export interface ProductInfo extends ProductRef {
   price: { amount: number; currency: string } | null;
   url: string | null;
   measureText: string | null;
+  /** Color/design variant descriptor (e.g. "Dark blue", "Beige"). */
+  designText?: string | null;
 }
 
 // ── Store ──
@@ -116,6 +118,8 @@ export interface CopilotResponse {
   answer: string;
   citations: Citation[];
   warnings: string[];
+  /** Product search results, if any. Used for richer answer synthesis. */
+  products?: ProductInfo[];
 }
 
 export interface ToolCallRecord {
