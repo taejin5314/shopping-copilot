@@ -250,6 +250,36 @@ npm run test:all      # All tests
 
 Zero heavy dependencies. No vector database, no embedding model, no ORM.
 
+## Deployment
+
+The project ships with a multi-stage Dockerfile that bundles both shopping-copilot and ikea-mcp in a single container.
+
+### Docker (local or any host)
+
+```bash
+docker build -t shopping-copilot .
+docker run -p 4000:4000 shopping-copilot
+# → http://localhost:4000
+
+# With LLM synthesis:
+docker run -p 4000:4000 -e ANTHROPIC_API_KEY=sk-ant-... shopping-copilot
+```
+
+### Render / Railway / Fly.io
+
+All three detect the Dockerfile automatically:
+
+1. Push this repo to GitHub
+2. Create a new **Web Service** pointing at the repo
+3. Set environment variables:
+   - `PORT` — platform usually sets this automatically
+   - `ANTHROPIC_API_KEY` — optional, for LLM synthesis
+4. Deploy
+
+The container starts ikea-mcp on port 3000 internally, so no separate MCP service is needed.
+
+> **Note:** Free-tier services may cold-start in ~30 s after inactivity. This is normal for portfolio demos.
+
 ## License
 
 MIT
