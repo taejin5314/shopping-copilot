@@ -2,7 +2,7 @@
 
 Retailer-agnostic shopping assistant that compares stores across multiple retailers using deterministic recommendation logic, policy retrieval (RAG), and optional LLM synthesis.
 
-> **Status:** Active development (v0.1.0) — not production-ready yet.
+> **Status:** Active development (v0.1.0) — functional demo, not production-ready.
 
 ## What it does
 
@@ -36,6 +36,8 @@ POST /ask
   ▼
 QueryInput (Zod validation)
   │
+  ├─► locationText? ──► Geocoder (Nominatim) ──► {lat, lng}
+  │
   ▼
 Intent Classifier (pattern-based, no LLM)
   │
@@ -58,7 +60,12 @@ Intent Classifier (pattern-based, no LLM)
     CopilotResponse
 ```
 
-**Key design principle:** LLM is only used for synthesis/presentation. All routing, scoring, and data retrieval is deterministic.
+**Key design principles:**
+
+- **LLM is only for synthesis/presentation.** All routing, scoring, and data retrieval is deterministic.
+- **Retailer adapters** abstract data access: IKEA uses MCP (Model Context Protocol), Structube uses a direct REST adapter.
+- **No API keys required** for core functionality — Anthropic key is optional, Nominatim geocoding is free.
+- **Graceful degradation** — missing location, price data, or LLM key all produce useful results with warnings.
 
 ## Supported Retailers
 
@@ -81,12 +88,16 @@ npm test
 ### Running the HTTP server
 
 ```bash
-# Start ikea-mcp first (required for IKEA adapter)
-npx ikea-mcp@1.6.1
+# Copy env template
+cp .env.example .env    # edit if needed
+
+# Start ikea-mcp first (required for IKEA queries)
+npx ikea-mcp@latest
 
 # In another terminal
 npm run dev:http
 # → shopping-copilot listening on http://localhost:4000
+# → Open http://localhost:4000 for the web UI
 ```
 
 ### Environment variables
@@ -100,6 +111,50 @@ npm run dev:http
 
 Without `ANTHROPIC_API_KEY`, the copilot falls back to deterministic template answers.
 
+## Demo
+
+Once the server is running, open **http://localhost:4000** for the web UI, or use curl:
+
+**1. Stock check with location (geocoded)**
+```bash
+curl -s -X POST http://localhost:4000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "query": "Is KALLAX 40340622 in stock?",
+    "retailer": "ikea",
+    "countryCode": "US",
+    "locationText": "Brooklyn, NY",
+    "cart": [{ "itemNo": "40340622", "quantity": 2 }]
+  }' | jq .recommendation.ranked[0]
+```
+→ Returns the top-ranked store with stock/distance/price scores.
+
+**2. Policy question**
+```bash
+curl -s -X POST http://localhost:4000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{ "query": "What is the return policy for Structube?", "retailer": "structube" }' \
+  | jq '{ answer, citations }'
+```
+→ Returns policy text with source citations from the RAG corpus.
+
+**3. Multi-item cart comparison**
+```bash
+curl -s -X POST http://localhost:4000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "query": "Where can I get all of these?",
+    "retailer": "ikea",
+    "countryCode": "US",
+    "locationText": "Toronto",
+    "cart": [
+      { "itemNo": "40340622", "quantity": 1 },
+      { "itemNo": "30275861", "quantity": 2 }
+    ]
+  }' | jq '.recommendation.ranked[:3] | .[] | { store: .store.label, score: .totalScore }'
+```
+→ Returns top 3 stores ranked by composite score.
+
 ## API
 
 ### `POST /ask`
@@ -110,7 +165,8 @@ Without `ANTHROPIC_API_KEY`, the copilot falls back to deterministic template an
   "query": "What is the return policy?",       // required, 1-2000 chars
   "retailer": "structube",                     // optional, default: ikea
   "countryCode": "CA",                         // optional, 2-char ISO
-  "location": { "lat": 43.65, "lng": -79.38 },// optional, for distance scoring
+  "locationText": "Toronto",                   // optional, free-text (geocoded server-side)
+  "location": { "lat": 43.65, "lng": -79.38 },// optional, explicit coords (takes priority)
   "cart": [                                    // optional, for stock scoring
     { "itemNo": "40340622", "quantity": 2 }
   ]
@@ -167,7 +223,7 @@ src/
 ## Tests
 
 ```bash
-npm test              # 103 unit tests (scoring, intent, retriever, synthesizer, adapters, distance, price)
+npm test              # 115 unit tests (no external services needed)
 npm run test:api      # API integration tests (requires live ikea-mcp)
 npm run test:integration  # Full integration tests (requires live ikea-mcp)
 npm run test:all      # All tests
@@ -182,6 +238,7 @@ npm run test:all      # All tests
 | structube-adapter | 17 | Adapter methods, pipeline integration, multi-retailer routing |
 | distance | 18 | Haversine, score normalization, distance-aware ranking |
 | price | 13 | Price normalization, cross-retailer, mixed signals |
+| geocode | 12 | Nominatim resolution, failure modes, distance scoring integration |
 
 ## Tech Stack
 
