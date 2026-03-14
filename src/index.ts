@@ -9,4 +9,8 @@ export { IKEA_CORPUS } from "./rag/corpus.js";
 export type { RagRetriever } from "./rag/retriever.js";
 export { classifyIntent } from "./domain/intent.js";
 export { scoreStore, rankStores, buildRecommendation } from "./domain/scoring.js";
+export { AnthropicProvider } from "./llm/anthropic.js";
+export { LlmSynthesizer, fallbackAnswer } from "./llm/synthesizer.js";
+export type { LlmProvider, LlmMessage, LlmResponse, LlmOptions } from "./llm/provider.js";
+export type { Synthesizer, SynthesisInput } from "./llm/synthesizer.js";
 export * from "./core/types.js";

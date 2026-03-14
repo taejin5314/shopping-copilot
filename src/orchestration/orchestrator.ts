@@ -10,6 +10,8 @@ import type {
 import { CopilotError } from "../core/types.js";
 import type { RetailerAdapter } from "../core/adapter.js";
 import type { RagRetriever } from "../rag/retriever.js";
+import type { Synthesizer } from "../llm/synthesizer.js";
+import { fallbackAnswer } from "../llm/synthesizer.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem } from "../domain/scoring.js";
@@ -21,6 +23,8 @@ import type { CartItem } from "../domain/scoring.js";
 export interface OrchestratorConfig {
   adapter: RetailerAdapter;
   retriever: RagRetriever;
+  /** Optional LLM synthesizer. Falls back to deterministic answer if absent. */
+  synthesizer?: Synthesizer;
   maxStoreResults?: number;
 }
 
@@ -98,7 +102,9 @@ export async function handleQuery(
       warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
     }
 
-    const answer = buildAnswer(intent, recommendation, retrievedKnowledge, warnings);
+    const answer = config.synthesizer
+      ? await config.synthesizer.synthesize({ query, intent, recommendation, knowledge: retrievedKnowledge, warnings })
+      : fallbackAnswer({ query, intent, recommendation, knowledge: retrievedKnowledge, warnings });
 
     return {
       intent,
@@ -188,44 +194,4 @@ async function timed<T>(
   }
 }
 
-/**
- * Build a structured answer string from all gathered data.
- * In Phase 2, this will be replaced by LLM synthesis.
- */
-function buildAnswer(
-  intent: ClassifiedIntent,
-  recommendation: RecommendationResult | null,
-  knowledge: PolicyHit[],
-  warnings: string[],
-): string {
-  const parts: string[] = [];
 
-  if (recommendation && recommendation.ranked.length > 0) {
-    parts.push(...recommendation.explanationPoints);
-    const best = recommendation.ranked[0];
-    const itemSummary = best.itemDetails
-      .map((d) => `  - ${d.itemNo}: ${d.sufficient ? `${d.available} in stock (sufficient)` : `${d.available ?? 0} in stock (insufficient)`}`)
-      .join("\n");
-    parts.push(`Top store: ${best.store.label}\n${itemSummary}`);
-  }
-
-  if (knowledge.length > 0) {
-    parts.push("Relevant policy information:");
-    for (const hit of knowledge) {
-      parts.push(`  - ${hit.title}: ${hit.content.slice(0, 200)}`);
-    }
-  }
-
-  if (warnings.length > 0) {
-    parts.push("Warnings:");
-    for (const w of warnings) {
-      parts.push(`  ⚠ ${w}`);
-    }
-  }
-
-  if (parts.length === 0) {
-    parts.push("I wasn't able to find relevant information for your query.");
-  }
-
-  return parts.join("\n");
-}

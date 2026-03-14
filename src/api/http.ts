@@ -2,14 +2,21 @@ import { createHttpServer } from "./server.js";
 import { IkeaAdapter } from "../retailers/ikea/adapter.js";
 import { KeywordRetriever } from "../rag/keyword-retriever.js";
 import { IKEA_CORPUS } from "../rag/corpus.js";
+import { AnthropicProvider } from "../llm/anthropic.js";
+import { LlmSynthesizer } from "../llm/synthesizer.js";
+import type { OrchestratorConfig } from "../orchestration/orchestrator.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:3000";
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-const config = {
+const config: OrchestratorConfig = {
   adapter: new IkeaAdapter({ mcpBaseUrl: MCP_URL, apiKey: process.env.MCP_API_KEY }),
   retriever: new KeywordRetriever(IKEA_CORPUS),
   maxStoreResults: 5,
+  ...(ANTHROPIC_API_KEY && {
+    synthesizer: new LlmSynthesizer(new AnthropicProvider({ apiKey: ANTHROPIC_API_KEY })),
+  }),
 };
 
 const server = createHttpServer(config);
