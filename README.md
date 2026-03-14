@@ -2,7 +2,7 @@
 
 Retailer-agnostic shopping assistant that compares stores across multiple retailers using deterministic recommendation logic, policy retrieval (RAG), and optional LLM synthesis.
 
-> **Status:** Active development (v0.1.0) — functional demo, not production-ready.
+> **Status:** v0.1.0 — functional demo, deployed on [Render](https://render.com).
 
 ## What it does
 
@@ -15,18 +15,21 @@ curl -X POST http://localhost:4000/ask \
     "query": "Is KALLAX 40340622 in stock near me?",
     "retailer": "ikea",
     "countryCode": "US",
-    "location": { "lat": 40.67, "lng": -73.98 },
+    "locationText": "Brooklyn, NY",
     "cart": [{ "itemNo": "40340622", "quantity": 2 }]
   }'
 ```
 
 The copilot will:
 
-1. **Classify intent** — stock check, policy question, store recommendation, product info
-2. **Fetch live data** — via MCP tools (IKEA) or REST APIs (Structube)
-3. **Rank stores** — deterministic scoring: stock coverage (50%), convenience (25%), price (15%), distance (10%)
-4. **Retrieve policies** — BM25 keyword search over curated policy corpora
-5. **Synthesize an answer** — LLM-powered (Anthropic Claude) or deterministic fallback
+1. **Classify intent** — stock check, policy question, recommendation, product info
+2. **Geocode location** — free-text like "Toronto, ON" → lat/lng (via Nominatim)
+3. **Fetch live data** — via MCP tools (IKEA) or REST APIs (Structube)
+4. **Rank stores** — deterministic composite scoring: stock (50%) + convenience (25%) + price (15%) + distance (10%)
+5. **Retrieve policies** — BM25 keyword search over curated retailer corpora
+6. **Synthesize an answer** — LLM-powered (Anthropic Claude) or deterministic fallback
+
+> **Note:** When a cart is provided, the stock/ranking path runs automatically — even if the query is in a non-English language the classifier doesn't recognize.
 
 ## Architecture
 
@@ -209,33 +212,33 @@ Pure deterministic functions — no I/O, no LLM.
 
 ```
 src/
-├── api/            HTTP server, Zod schemas, ask() entrypoint
+├── api/            HTTP server, Zod schemas, ask() entrypoint, geocode resolution
 ├── core/           Domain types, RetailerAdapter interface, CopilotError
-├── domain/         Intent classifier, scoring engine, geo utilities
+├── domain/         Intent classifier, scoring engine, geo utilities, geocoder
 ├── llm/            LlmProvider interface, Anthropic provider, synthesizer
 ├── orchestration/  Routes intent → adapters/RAG → scorer → response
 ├── rag/            RagRetriever, BM25 keyword retriever, policy corpora
 └── retailers/
-    ├── ikea/       MCP SDK client adapter
-    └── structube/  REST API adapter + static store data
+    ├── ikea/       MCP SDK client adapter (live stock + prices)
+    └── structube/  REST API adapter + static store data (15 locations)
 ```
 
 ## Tests
 
 ```bash
-npm test              # 115 unit tests (no external services needed)
+npm test              # 120 unit tests (no external services needed)
 npm run test:api      # API integration tests (requires live ikea-mcp)
 npm run test:integration  # Full integration tests (requires live ikea-mcp)
-npm run test:all      # All tests
+npm run test:all      # All tests (120 unit + 14 integration = 134)
 ```
 
 | Test Suite | Count | What it covers |
 |------------|-------|----------------|
-| intent | 15 | Pattern-based intent classification |
+| intent | 18 | Pattern-based classification, non-English handling |
 | scoring | 13 | Stock coverage, ranking, recommendations |
 | retriever | 15 | BM25 keyword retrieval, edge cases |
 | synthesizer | 12 | LLM synthesis, fallback, prompt construction |
-| structube-adapter | 17 | Adapter methods, pipeline integration, multi-retailer routing |
+| structube-adapter | 19 | Adapter methods, pipeline, multi-retailer routing, cart override |
 | distance | 18 | Haversine, score normalization, distance-aware ranking |
 | price | 13 | Price normalization, cross-retailer, mixed signals |
 | geocode | 12 | Nominatim resolution, failure modes, distance scoring integration |
@@ -252,9 +255,9 @@ Zero heavy dependencies. No vector database, no embedding model, no ORM.
 
 ## Deployment
 
-The project ships with a multi-stage Dockerfile that bundles both shopping-copilot and ikea-mcp in a single container.
+The project ships with a multi-stage Dockerfile that bundles both shopping-copilot and ikea-mcp in a single container. A startup script waits for ikea-mcp to become healthy before accepting traffic.
 
-### Docker (local or any host)
+### Docker (local)
 
 ```bash
 docker build -t shopping-copilot .
@@ -272,13 +275,13 @@ All three detect the Dockerfile automatically:
 1. Push this repo to GitHub
 2. Create a new **Web Service** pointing at the repo
 3. Set environment variables:
-   - `PORT` — platform usually sets this automatically
+   - `PORT` — usually set automatically by the platform
    - `ANTHROPIC_API_KEY` — optional, for LLM synthesis
 4. Deploy
 
-The container starts ikea-mcp on port 3000 internally, so no separate MCP service is needed.
+The container starts ikea-mcp internally on port 3000, so no separate MCP service is needed.
 
-> **Note:** Free-tier services may cold-start in ~30 s after inactivity. This is normal for portfolio demos.
+> **Note:** Free-tier services may cold-start in ~30s after inactivity. The MCP connection includes retry logic (3 attempts, 2s delay) to handle this gracefully.
 
 ## License
 
