@@ -59,7 +59,17 @@ export function scoreStore(
   });
 
   const fulfilledCount = itemDetails.filter((d) => d.sufficient).length;
-  const stockCoverageScore = cart.length > 0 ? fulfilledCount / cart.length : 0;
+  // "UNKNOWN" means the retailer API does not expose per-store inventory (e.g. Structube).
+  // This is distinct from out-of-stock (quantity === 0) or missing data (item not returned).
+  // Treat it as a neutral 0.5 so these retailers aren't penalised relative to retailers
+  // with real stock data — this is a product heuristic, not a true availability signal.
+  const allUnknown =
+    storeStock.items.length > 0 &&
+    storeStock.items.every((item) => item.stockLevel === "UNKNOWN");
+  const stockCoverageScore =
+    cart.length === 0 ? 0
+    : allUnknown ? 0.5
+    : fulfilledCount / cart.length;
   const convenienceScore = stockCoverageScore;
 
   // Distance scoring: requires both user location and store coordinates

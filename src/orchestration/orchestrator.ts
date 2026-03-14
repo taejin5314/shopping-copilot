@@ -94,6 +94,12 @@ export async function handleQuery(
           if (!itemPrices) {
             warnings.push("Price data not available — price scoring was not applied.");
           }
+          const allStockUnknown = storeStocks.every((ss) =>
+            ss.items.every((item) => item.stockLevel === "UNKNOWN"),
+          );
+          if (allStockUnknown) {
+            warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
+          }
           warnings.push(...recommendation.warnings);
         } catch (err) {
           const msg = err instanceof CopilotError ? err.message : String(err);

@@ -51,7 +51,10 @@ export async function ask(
   }
 
   const { query, retailer: retailerKey, countryCode, locationText, location, cart } = parsed.data;
-  const { adapter, retriever } = resolveRetailer(retailerKey, config);
+  // Auto-detect retailer from query text when not explicitly specified.
+  const resolvedRetailerKey = retailerKey ??
+    Object.keys(config.retailers ?? {}).find((id) => new RegExp(`\\b${id}\\b`, "i").test(query));
+  const { adapter, retriever } = resolveRetailer(resolvedRetailerKey, config);
 
   // Resolve location: explicit coords take priority, then geocode locationText.
   let resolvedLocation = location;
