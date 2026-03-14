@@ -43,7 +43,7 @@ export async function ask(
     );
   }
 
-  const { query, retailer: retailerKey, countryCode, cart } = parsed.data;
+  const { query, retailer: retailerKey, countryCode, location, cart } = parsed.data;
   const { adapter, retriever } = resolveRetailer(retailerKey, config);
 
   const orchConfig: OrchestratorConfig = {
@@ -53,7 +53,7 @@ export async function ask(
     maxStoreResults: config.maxStoreResults,
   };
 
-  return handleQuery(query, orchConfig, { retailer: retailerKey, countryCode, cart });
+  return handleQuery(query, orchConfig, { retailer: retailerKey, countryCode, location, cart });
 }
 
 function resolveRetailer(

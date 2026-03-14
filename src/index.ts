@@ -12,6 +12,8 @@ export { STRUCTUBE_CORPUS } from "./rag/structube-corpus.js";
 export type { RagRetriever } from "./rag/retriever.js";
 export { classifyIntent } from "./domain/intent.js";
 export { scoreStore, rankStores, buildRecommendation } from "./domain/scoring.js";
+export { haversineKm, distanceToScore } from "./domain/geo.js";
+export type { GeoCoord } from "./domain/geo.js";
 export { AnthropicProvider } from "./llm/anthropic.js";
 export { LlmSynthesizer, fallbackAnswer } from "./llm/synthesizer.js";
 export type { LlmProvider, LlmMessage, LlmResponse, LlmOptions } from "./llm/provider.js";

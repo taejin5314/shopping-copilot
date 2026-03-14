@@ -4,6 +4,8 @@ import type {
   ItemScoreDetail,
   RecommendationResult,
 } from "../core/types.js";
+import type { GeoCoord } from "./geo.js";
+import { haversineKm, distanceToScore } from "./geo.js";
 
 // ──────────────────────────────────────────────
 // Deterministic scoring engine — pure functions
@@ -28,6 +30,11 @@ export interface CartItem {
   quantity: number;
 }
 
+export interface ScoringContext {
+  /** User's location for distance scoring. */
+  userLocation?: GeoCoord;
+}
+
 /**
  * Score a single store against a cart.
  * All inputs are plain data — no I/O, no LLM.
@@ -36,6 +43,7 @@ export function scoreStore(
   storeStock: StoreStock,
   cart: CartItem[],
   weights: ScoringWeights = DEFAULT_WEIGHTS,
+  ctx?: ScoringContext,
 ): ScoredStore {
   const itemDetails: ItemScoreDetail[] = cart.map((cartItem) => {
     const match = storeStock.items.find((a) => a.itemNo === cartItem.itemNo);
@@ -50,13 +58,16 @@ export function scoreStore(
 
   const fulfilledCount = itemDetails.filter((d) => d.sufficient).length;
   const stockCoverageScore = cart.length > 0 ? fulfilledCount / cart.length : 0;
-
-  // Convenience: 1.0 if this single store covers everything, decays otherwise.
-  // For single-store scoring, it's simply the coverage ratio.
   const convenienceScore = stockCoverageScore;
 
-  const distanceScore: number | null = null; // placeholder
-  const priceScore: number | null = null;    // placeholder
+  // Distance scoring: requires both user location and store coordinates
+  let distanceScore: number | null = null;
+  if (ctx?.userLocation && storeStock.store.coords) {
+    const km = haversineKm(ctx.userLocation, storeStock.store.coords);
+    distanceScore = distanceToScore(km);
+  }
+
+  const priceScore: number | null = null; // placeholder
 
   const totalScore =
     stockCoverageScore * weights.stockCoverage +
@@ -82,9 +93,10 @@ export function rankStores(
   storeStocks: StoreStock[],
   cart: CartItem[],
   weights?: ScoringWeights,
+  ctx?: ScoringContext,
 ): ScoredStore[] {
   return storeStocks
-    .map((ss) => scoreStore(ss, cart, weights))
+    .map((ss) => scoreStore(ss, cart, weights, ctx))
     .sort((a, b) => {
       const scoreDiff = b.totalScore - a.totalScore;
       if (scoreDiff !== 0) return scoreDiff;
@@ -129,6 +141,12 @@ export function buildRecommendation(
   explanationPoints.push(
     `Stock coverage score: ${(best.stockCoverageScore * 100).toFixed(0)}%`,
   );
+
+  if (best.distanceScore !== null) {
+    explanationPoints.push(
+      `Distance score: ${(best.distanceScore * 100).toFixed(0)}%`,
+    );
+  }
 
   // Warn about missing items
   const missingItems = best.itemDetails.filter((d) => !d.sufficient);

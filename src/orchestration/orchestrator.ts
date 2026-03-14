@@ -14,7 +14,8 @@ import type { Synthesizer } from "../llm/synthesizer.js";
 import { fallbackAnswer } from "../llm/synthesizer.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
-import type { CartItem } from "../domain/scoring.js";
+import type { CartItem, ScoringContext } from "../domain/scoring.js";
+import type { GeoCoord } from "../domain/geo.js";
 
 // ──────────────────────────────────────────────
 // Orchestration — routes intent → adapters/RAG → scorer → response
@@ -33,6 +34,8 @@ export interface QueryContext {
   retailer?: string;
   /** Override country code. */
   countryCode?: string;
+  /** User location for distance-based scoring. */
+  location?: GeoCoord;
   /** Pre-parsed cart items (skip extraction from query). */
   cart?: CartItem[];
 }
@@ -62,8 +65,12 @@ export async function handleQuery(
       } else {
         try {
           const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
-          const ranked = rankStores(storeStocks, cart);
+          const scoringCtx: ScoringContext = { userLocation: context?.location };
+          const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
           recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
+          if (!context?.location) {
+            warnings.push("No user location provided — distance scoring was not applied.");
+          }
           warnings.push(...recommendation.warnings);
         } catch (err) {
           const msg = err instanceof CopilotError ? err.message : String(err);

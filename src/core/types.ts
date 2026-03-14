@@ -27,6 +27,8 @@ export interface StoreRef {
   retailer: RetailerId;
   storeId: string;
   label: string;
+  /** Optional store coordinates for distance scoring. */
+  coords?: { lat: number; lng: number };
 }
 
 export interface StoreStock {

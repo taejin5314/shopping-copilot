@@ -10,7 +10,7 @@
     "dev": "tsx src/index.ts",
     "start:http": "node dist/api/http.js",
     "dev:http": "tsx src/api/http.ts",
-    "test": "node --import tsx/esm --test test/intent.test.ts test/scoring.test.ts test/retriever.test.ts test/synthesizer.test.ts test/structube-adapter.test.ts",
+    "test": "node --import tsx/esm --test test/intent.test.ts test/scoring.test.ts test/retriever.test.ts test/synthesizer.test.ts test/structube-adapter.test.ts test/distance.test.ts",
     "test:api": "node --import tsx/esm --test test/api.test.ts",
     "test:integration": "node --import tsx/esm --test test/integration.test.ts",
     "test:all": "node --import tsx/esm --test test/**/*.test.ts",
