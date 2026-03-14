@@ -4,350 +4,911 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Shopping Copilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{
-    --bg:#f8f9fa;--card:#fff;--border:#dee2e6;--accent:#0d6efd;
-    --accent-hover:#0b5ed7;--text:#212529;--muted:#6c757d;
-    --success:#198754;--warn:#ffc107;--danger:#dc3545;
-    --radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
-  }
-  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
-  .container{max-width:820px;margin:0 auto;padding:24px 16px}
-  h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
-  .subtitle{color:var(--muted);font-size:.875rem;margin-bottom:24px}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── Form ── */
-  .form-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:24px}
-  .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-  .form-row:last-child{margin-bottom:0}
-  .field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
-  .field-full{flex-basis:100%}
-  label{font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  input,select,textarea{border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.9rem;font-family:inherit;background:#fff;transition:border-color .15s}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
-  textarea{resize:vertical;min-height:64px}
+:root {
+  --bg: #fafaf9;
+  --card: #ffffff;
+  --border: #e7e5e4;
+  --border-mid: #d6d3d1;
+  --accent: #2563eb;
+  --accent-subtle: #eff6ff;
+  --accent-border: #bfdbfe;
+  --accent-hover: #1d4ed8;
+  --text: #1c1917;
+  --text-2: #57534e;
+  --text-3: #a8a29e;
+  --success: #15803d;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --warn: #b45309;
+  --warn-bg: #fffbeb;
+  --warn-border: #fde68a;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Fira Code', monospace;
+  --r: 10px;
+  --r-lg: 14px;
+}
 
-  .toggle-advanced{background:none;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;padding:0;text-decoration:underline}
-  .advanced-fields{display:none;margin-top:8px}
-  .advanced-fields.open{display:flex;gap:12px;flex-wrap:wrap}
+html { font-size: 15px; }
+body {
+  font-family: var(--sans);
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, #d6d3d1 1px, transparent 1px);
+  background-size: 20px 20px;
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
 
-  .cart-hint{font-size:.75rem;color:var(--muted)}
-  .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:6px;padding:10px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-primary:hover:not(:disabled){background:var(--accent-hover)}
-  .btn:disabled{opacity:.55;cursor:not-allowed}
-  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+}
 
-  /* ── Response ── */
-  .response{display:none}
-  .response.visible{display:block}
-  .section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
-  .section-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:8px}
+/* ── Header ── */
+.header { margin-bottom: 32px; }
+.eyebrow {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1.15;
+  color: var(--text);
+}
+.header p {
+  color: var(--text-2);
+  font-size: .85rem;
+  margin-top: 5px;
+  font-weight: 400;
+}
 
-  .answer-text{font-size:1rem;white-space:pre-wrap}
-  .intent-badge{display:inline-block;background:var(--accent);color:#fff;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:12px;text-transform:uppercase;margin-bottom:8px}
+/* ── Form card ── */
+.form-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 4px 24px rgba(0,0,0,.06), 0 1px 4px rgba(0,0,0,.04);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
 
-  /* Store cards */
-  .store-cards{display:flex;flex-direction:column;gap:10px}
-  .store-card{border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
-  .store-rank{font-size:1.4rem;font-weight:700;color:var(--accent);min-width:28px}
-  .store-name{font-weight:600;flex:1;min-width:120px}
-  .store-score{font-size:.85rem;font-weight:600;background:var(--bg);padding:2px 8px;border-radius:4px}
-  .score-bar{display:flex;gap:8px;flex-basis:100%;flex-wrap:wrap}
-  .score-pill{font-size:.72rem;padding:2px 6px;border-radius:4px;background:#e9ecef;white-space:nowrap}
-  .item-detail{font-size:.8rem;color:var(--muted)}
-  .item-ok{color:var(--success)}
-  .item-miss{color:var(--danger)}
+/* ── Location bar ── */
+.loc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  background: var(--accent-subtle);
+  border-bottom: 1px solid var(--accent-border);
+  min-height: 44px;
+}
+.loc-indicator {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+.loc-pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.loc-pulse.detecting { animation: pulse 1.4s ease-in-out infinite; }
+.loc-pulse.warn { background: var(--warn); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(37,99,235,.4); }
+  50% { opacity: .5; box-shadow: 0 0 0 4px rgba(37,99,235,0); }
+}
+.loc-label {
+  font-size: .78rem;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.loc-label b { color: var(--text); font-weight: 500; }
+.loc-retry {
+  background: none;
+  border: 1px solid var(--accent-border);
+  border-radius: 5px;
+  color: var(--accent);
+  padding: 2px 9px;
+  font-size: .72rem;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.loc-retry:hover { background: #dbeafe; }
 
-  /* Explanation */
-  .explanation-list{list-style:disc;padding-left:20px;font-size:.85rem}
-  .explanation-list li{margin-bottom:2px}
+/* ── Form body ── */
+.form-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
 
-  /* Warnings */
-  .warning-box{background:#fff3cd;border:1px solid var(--warn);border-radius:6px;padding:10px 12px;font-size:.85rem;margin-bottom:8px}
-  .warning-box:last-child{margin-bottom:0}
+.field-label {
+  display: block;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
 
-  /* Citations */
-  .citation{font-size:.85rem;margin-bottom:4px}
-  .citation a{color:var(--accent);text-decoration:none}
-  .citation a:hover{text-decoration:underline}
+/* ── Radius pills ── */
+.radius-group {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.r-btn {
+  padding: 5px 13px;
+  font-size: .78rem;
+  font-weight: 600;
+  font-family: var(--sans);
+  border: 1.5px solid var(--border-mid);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .12s;
+  letter-spacing: -.01em;
+}
+.r-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.r-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(37,99,235,.3);
+}
+.r-btn:disabled { opacity: .35; cursor: not-allowed; }
+.r-btn:disabled:hover { border-color: var(--border-mid); color: var(--text-2); background: transparent; }
 
-  /* Tool calls (collapsible) */
-  details{font-size:.82rem}
-  details summary{cursor:pointer;font-weight:600;color:var(--muted);margin-bottom:6px}
-  .tool-row{display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid #f0f0f0}
-  .tool-name{font-weight:600;min-width:140px}
-  .tool-duration{color:var(--muted)}
-  .tool-ok{color:var(--success)}
-  .tool-fail{color:var(--danger)}
+/* ── Query ── */
+textarea {
+  width: 100%;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--r);
+  padding: 10px 13px;
+  font-size: .9rem;
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--card);
+  resize: vertical;
+  min-height: 70px;
+  line-height: 1.5;
+  transition: border-color .15s, box-shadow .15s;
+}
+textarea::placeholder { color: var(--text-3); }
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+}
 
-  /* Error */
-  .error-box{background:#f8d7da;border:1px solid var(--danger);border-radius:6px;padding:12px;font-size:.9rem;color:#842029;margin-bottom:16px;display:none}
-  .error-box.visible{display:block}
+/* ── Bottom row ── */
+.form-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+select {
+  flex: 1;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--r);
+  padding: 9px 11px;
+  font-size: .875rem;
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--card);
+  cursor: pointer;
+  transition: border-color .15s;
+  appearance: auto;
+}
+select:focus { outline: none; border-color: var(--accent); }
+
+.btn-ask {
+  padding: 9px 22px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  font-size: .875rem;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: background .12s, transform .1s;
+  white-space: nowrap;
+  letter-spacing: -.01em;
+}
+.btn-ask:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-ask:active:not(:disabled) { transform: scale(.97); }
+.btn-ask:disabled { opacity: .5; cursor: not-allowed; }
+
+.spinner-ring {
+  display: none;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .55s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Error ── */
+.err-box {
+  display: none;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r);
+  padding: 11px 14px;
+  font-size: .85rem;
+  color: #991b1b;
+  margin-bottom: 16px;
+}
+.err-box.show { display: block; }
+
+/* ── Response area ── */
+.results { display: none; flex-direction: column; gap: 12px; }
+.results.show { display: flex; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  animation: fadeUp .3s ease both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card:nth-child(2) { animation-delay: .05s; }
+.card:nth-child(3) { animation-delay: .1s; }
+.card:nth-child(4) { animation-delay: .15s; }
+.card:nth-child(5) { animation-delay: .2s; }
+.card:nth-child(6) { animation-delay: .25s; }
+
+.card-label {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 12px;
+}
+
+/* ── Intent + Answer ── */
+.intent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.badge {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  background: var(--accent);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.answer-body {
+  font-size: .9rem;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+/* ── Warnings ── */
+.warn-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  font-size: .82rem;
+  color: #92400e;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.warn-item:last-child { margin-bottom: 0; }
+.warn-ico { flex-shrink: 0; }
+
+/* ── Store cards ── */
+.stores { display: flex; flex-direction: column; gap: 9px; }
+.store-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 14px 14px 18px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.store-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--border-mid);
+}
+.store-card.r1::before { background: #f59e0b; }
+.store-card.r2::before { background: #94a3b8; }
+.store-card.r3::before { background: #c4813a; }
+.store-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(37,99,235,.07); }
+
+.store-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.store-rank {
+  font-size: .7rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text-3);
+  min-width: 20px;
+}
+.r1 .store-rank { color: #d97706; }
+.store-name { font-weight: 600; font-size: .88rem; flex: 1; line-height: 1.3; }
+.score-chip {
+  font-family: var(--mono);
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+/* Score bar grid */
+.score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+.score-seg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .7rem;
+  color: var(--text-3);
+}
+.bar-track {
+  width: 48px; height: 3px;
+  border-radius: 2px;
+  background: #e7e5e4;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Item chips */
+.item-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .73rem;
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: #fafaf9;
+  line-height: 1.2;
+}
+.chip.ok  { background: var(--success-bg); border-color: var(--success-border); color: #166534; }
+.chip.bad { background: var(--danger-bg);  border-color: var(--danger-border);  color: #991b1b; }
+.chip-name { font-family: var(--sans); font-weight: 500; }
+.chip-id   { font-family: var(--mono); font-size: .67rem; opacity: .65; }
+.chip-qty  { font-family: var(--mono); font-size: .7rem; }
+
+/* Explanation */
+.expl { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.expl ul { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.expl li {
+  font-size: .78rem;
+  color: var(--text-2);
+  padding-left: 14px;
+  position: relative;
+}
+.expl li::before { content: '—'; position: absolute; left: 0; color: var(--text-3); }
+
+/* ── Products grid ── */
+.prod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.prod-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+}
+.prod-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 3px 14px rgba(37,99,235,.08);
+  transform: translateY(-1px);
+}
+.prod-name { font-weight: 600; font-size: .84rem; line-height: 1.3; }
+.prod-variant { font-family: var(--mono); font-size: .68rem; color: var(--text-3); margin-top: 1px; }
+.prod-sku { font-family: var(--mono); font-size: .68rem; color: var(--text-3); }
+.prod-price { font-size: .85rem; font-weight: 700; color: var(--accent); margin-top: 4px; }
+.prod-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: .74rem;
+  color: var(--accent);
+  text-decoration: none;
+  margin-top: 6px;
+  font-weight: 500;
+}
+.prod-link:hover { text-decoration: underline; }
+
+/* ── Citations ── */
+.cit {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: .82rem;
+  padding: 3px 0;
+}
+.cit-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.cit a { color: var(--accent); text-decoration: none; }
+.cit a:hover { text-decoration: underline; }
+
+/* ── Knowledge ── */
+.know-item {
+  padding: 10px 12px;
+  background: #fafaf9;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-bottom: 7px;
+}
+.know-item:last-child { margin-bottom: 0; }
+.know-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+.know-title { font-weight: 600; font-size: .82rem; }
+.know-score { font-family: var(--mono); font-size: .68rem; color: var(--text-3); }
+.know-body { font-size: .79rem; color: var(--text-2); line-height: 1.5; }
+
+/* ── Tool calls ── */
+details summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+}
+details summary::before { content: '▶'; font-size: .55rem; transition: transform .2s; }
+details[open] summary::before { transform: rotate(90deg); }
+.tool-list { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .77rem;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: #fafaf9;
+  border: 1px solid var(--border);
+}
+.tool-nm { font-family: var(--mono); font-weight: 500; flex: 1; }
+.tool-rt { font-size: .68rem; color: var(--text-3); }
+.tool-ms { font-family: var(--mono); font-size: .72rem; color: var(--text-3); }
+.t-ok   { color: var(--success); }
+.t-fail { color: var(--danger); }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>Shopping Copilot</h1>
-  <p class="subtitle">Multi-retailer product availability &amp; recommendation engine</p>
+<div class="wrap">
 
-  <!-- ── Input Form ── -->
+  <div class="header">
+    <div class="eyebrow">Multi-retailer</div>
+    <h1>Shopping Copilot</h1>
+    <p>Find products near you at IKEA and Structube</p>
+  </div>
+
   <div class="form-card">
-    <div class="form-row">
-      <div class="field field-full">
-        <label for="query">Query</label>
-        <textarea id="query" placeholder='e.g. "Is the KALLAX shelf 30275861 in stock near me?"' rows="2"></textarea>
+
+    <!-- Location bar -->
+    <div class="loc-bar">
+      <div class="loc-indicator">
+        <div id="loc-pulse" class="loc-pulse detecting"></div>
+        <span id="loc-label" class="loc-label">Detecting your location…</span>
       </div>
+      <button id="loc-retry" class="loc-retry" title="Retry GPS">↻ retry</button>
     </div>
-    <div class="form-row">
-      <div class="field">
-        <label for="retailer">Retailer</label>
-        <select id="retailer"><option value="">Auto-detect</option><option value="ikea">IKEA</option><option value="structube">Structube</option></select>
-      </div>
-      <div class="field">
-        <label for="country">Country</label>
-        <input id="country" type="text" maxlength="2" placeholder="US" />
-      </div>
-      <div class="field" style="flex:2">
-        <label for="location-text">Location</label>
-        <input id="location-text" type="text" placeholder='e.g. "Toronto", "M5V 2H1", "90210"' />
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="field field-full">
-        <button type="button" class="toggle-advanced" onclick="document.getElementById('adv').classList.toggle('open')">Advanced: raw lat/lng</button>
-        <div id="adv" class="advanced-fields">
-          <div class="field">
-            <label for="lat">Latitude</label>
-            <input id="lat" type="number" step="any" placeholder="43.65" />
-          </div>
-          <div class="field">
-            <label for="lng">Longitude</label>
-            <input id="lng" type="number" step="any" placeholder="-79.38" />
-          </div>
+
+    <div class="form-body">
+
+      <!-- Radius -->
+      <div>
+        <span class="field-label">Search radius</span>
+        <div class="radius-group" id="radius-group">
+          <button class="r-btn" data-km="10">10 km</button>
+          <button class="r-btn active" data-km="25">25 km</button>
+          <button class="r-btn" data-km="50">50 km</button>
+          <button class="r-btn" data-km="100">100 km</button>
+          <button class="r-btn" data-km="">Any</button>
         </div>
       </div>
-    </div>
-    <div class="form-row">
-      <div class="field field-full">
-        <label for="cart">Cart <span class="cart-hint">(one per line: itemNo quantity — e.g. "30275861 2")</span></label>
-        <textarea id="cart" placeholder="30275861 2&#10;40351185 1" rows="2"></textarea>
+
+      <!-- Query -->
+      <div>
+        <span class="field-label">What are you looking for?</span>
+        <textarea id="query" rows="2"
+          placeholder='e.g. "quality sofa bed" or "Is KALLAX 30275861 in stock near me?"'></textarea>
       </div>
-    </div>
-    <div class="form-row">
-      <button id="submit" class="btn btn-primary" type="button">Ask</button>
+
+      <!-- Footer -->
+      <div class="form-footer">
+        <select id="retailer">
+          <option value="">Auto-detect retailer</option>
+          <option value="ikea">IKEA</option>
+          <option value="structube">Structube</option>
+        </select>
+        <button id="submit" class="btn-ask" type="button">
+          <span id="spinner" class="spinner-ring"></span>
+          <span id="btn-lbl">Ask</span>
+        </button>
+      </div>
+
     </div>
   </div>
 
-  <!-- ── Error ── -->
-  <div id="error" class="error-box"></div>
+  <!-- Error -->
+  <div id="err" class="err-box"></div>
 
-  <!-- ── Response ── -->
-  <div id="response" class="response">
+  <!-- Results -->
+  <div id="results" class="results">
 
-    <!-- Intent -->
-    <div class="section">
-      <span id="intent-badge" class="intent-badge"></span>
-      <div id="answer" class="answer-text"></div>
+    <div class="card" id="s-answer">
+      <div class="intent-row">
+        <span id="intent-badge" class="badge"></span>
+      </div>
+      <div id="answer" class="answer-body"></div>
     </div>
 
-    <!-- Warnings -->
-    <div id="warnings-section" class="section" style="display:none">
-      <div class="section-title">Warnings</div>
+    <div class="card" id="s-warn" style="display:none">
+      <div class="card-label">Notices</div>
       <div id="warnings"></div>
     </div>
 
-    <!-- Recommendation -->
-    <div id="rec-section" class="section" style="display:none">
-      <div class="section-title">Store Rankings</div>
-      <div id="store-cards" class="store-cards"></div>
-      <div id="explanation" style="margin-top:10px"></div>
+    <div class="card" id="s-rec" style="display:none">
+      <div class="card-label">Store Rankings</div>
+      <div id="stores" class="stores"></div>
+      <div id="expl" class="expl" style="display:none"></div>
     </div>
 
-    <!-- Citations -->
-    <div id="citations-section" class="section" style="display:none">
-      <div class="section-title">Citations</div>
+    <div class="card" id="s-products" style="display:none">
+      <div class="card-label">Matching Products</div>
+      <div id="prod-grid" class="prod-grid"></div>
+    </div>
+
+    <div class="card" id="s-citations" style="display:none">
+      <div class="card-label">Sources</div>
       <div id="citations"></div>
     </div>
 
-    <!-- Knowledge -->
-    <div id="knowledge-section" class="section" style="display:none">
-      <div class="section-title">Retrieved Knowledge</div>
+    <div class="card" id="s-knowledge" style="display:none">
+      <div class="card-label">Policy Information</div>
       <div id="knowledge"></div>
     </div>
 
-    <!-- Tool Calls -->
-    <div id="tools-section" class="section" style="display:none">
+    <div class="card" id="s-tools" style="display:none">
       <details>
         <summary>Tool Calls</summary>
-        <div id="tools"></div>
+        <div id="tools" class="tool-list"></div>
       </details>
     </div>
+
   </div>
 </div>
 
 <script>
-const $ = (s) => document.getElementById(s);
+// ── State ──
+let userLat = null, userLng = null;
+let selectedKm = 25;
 
-const submitBtn = $("submit");
-submitBtn.addEventListener("click", handleSubmit);
-$("query").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+// ── Helpers ──
+const $ = (id) => document.getElementById(id);
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s ?? '');
+  return d.innerHTML;
+}
+function pct(n) { return n == null ? '—' : (n * 100).toFixed(0) + '%'; }
+function show(id, yes = true) { $(id).style.display = yes ? '' : 'none'; }
+
+// ── Geolocation ──
+function initGeo() {
+  $('loc-pulse').className = 'loc-pulse detecting';
+  $('loc-label').innerHTML = 'Detecting your location…';
+  setRadiusState(true);
+
+  if (!navigator.geolocation) {
+    setGeoFail('Geolocation not supported');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      userLat = coords.latitude;
+      userLng = coords.longitude;
+      $('loc-pulse').className = 'loc-pulse';
+      $('loc-label').innerHTML =
+        `<b>📍 ${userLat.toFixed(4)},&nbsp;${userLng.toFixed(4)}</b>`;
+      setRadiusState(false);
+    },
+    (e) => {
+      userLat = null; userLng = null;
+      const msg = e.code === 1 ? 'Location access denied — radius filtering disabled'
+                : e.code === 2 ? 'Location unavailable — radius filtering disabled'
+                : 'Location timed out — radius filtering disabled';
+      setGeoFail(msg);
+    },
+    { timeout: 10000, maximumAge: 300000 }
+  );
+}
+
+function setGeoFail(msg) {
+  $('loc-pulse').className = 'loc-pulse warn';
+  $('loc-label').textContent = '⚠ ' + msg;
+  setRadiusState(true);
+}
+
+function setRadiusState(disabled) {
+  document.querySelectorAll('.r-btn').forEach(b => {
+    b.disabled = disabled;
+    b.title = disabled ? 'Allow location access to enable radius filtering' : '';
+  });
+}
+
+// ── Radius selection ──
+document.querySelectorAll('.r-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.r-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedKm = btn.dataset.km ? parseInt(btn.dataset.km, 10) : null;
+  });
+});
+$('loc-retry').addEventListener('click', initGeo);
+
+// ── Submit ──
+$('submit').addEventListener('click', doAsk);
+$('query').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doAsk(); }
 });
 
-async function handleSubmit() {
-  const query = $("query").value.trim();
-  if (!query) return;
+async function doAsk() {
+  const query = $('query').value.trim();
+  if (!query) { $('query').focus(); return; }
 
-  // Build request body
   const body = { query };
-  const retailer = $("retailer").value;
+  const retailer = $('retailer').value;
   if (retailer) body.retailer = retailer;
-  const country = $("country").value.trim().toUpperCase();
-  if (country) body.countryCode = country;
-  const locationText = $("location-text").value.trim();
-  if (locationText) body.locationText = locationText;
-  const lat = parseFloat($("lat").value);
-  const lng = parseFloat($("lng").value);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) body.location = { lat, lng };
-  const cartLines = $("cart").value.trim().split("\n").filter(Boolean);
-  if (cartLines.length) {
-    body.cart = cartLines.map((line) => {
-      const [itemNo, qty] = line.trim().split(/\s+/);
-      return { itemNo, quantity: parseInt(qty, 10) || 1 };
-    });
+  if (userLat != null && userLng != null) {
+    body.location = { lat: userLat, lng: userLng };
+    if (selectedKm != null) body.radiusKm = selectedKm;
   }
 
-  // UI state: loading
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<span class="spinner"></span> Asking…';
-  $("error").classList.remove("visible");
-  $("response").classList.remove("visible");
+  $('submit').disabled = true;
+  $('spinner').style.display = 'block';
+  $('btn-lbl').textContent = 'Asking…';
+  $('err').classList.remove('show');
+  $('results').classList.remove('show');
 
   try {
-    const res = await fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const errBody = await res.json().catch(() => null);
-      throw new Error(errBody?.message ?? `HTTP ${res.status}`);
+      const eb = await res.json().catch(() => null);
+      throw new Error(eb?.message ?? `HTTP ${res.status}`);
     }
-    const data = await res.json();
-    renderResponse(data);
-  } catch (err) {
-    $("error").textContent = err.message;
-    $("error").classList.add("visible");
+    render(await res.json());
+  } catch (e) {
+    $('err').textContent = e.message;
+    $('err').classList.add('show');
   } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = "Ask";
+    $('submit').disabled = false;
+    $('spinner').style.display = 'none';
+    $('btn-lbl').textContent = 'Ask';
   }
 }
 
-function esc(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
+// ── Render ──
+function render(r) {
+  // Product lookup map for enriching item details
+  const pmap = {};
+  (r.products ?? []).forEach(p => { pmap[p.itemNo] = p; });
 
-function renderResponse(r) {
-  // Intent badge
-  $("intent-badge").textContent = r.intent?.type ?? "unknown";
-
-  // Answer
-  $("answer").textContent = r.answer ?? "";
+  // Intent + answer
+  $('intent-badge').textContent = r.intent?.type ?? 'unknown';
+  $('answer').textContent = r.answer ?? '';
 
   // Warnings
-  const allWarnings = [
-    ...(r.warnings ?? []),
-    ...(r.recommendation?.warnings ?? []),
-  ];
-  if (allWarnings.length) {
-    $("warnings").innerHTML = allWarnings.map((w) => `<div class="warning-box">${esc(w)}</div>`).join("");
-    $("warnings-section").style.display = "";
-  } else {
-    $("warnings-section").style.display = "none";
-  }
+  const warns = [...(r.warnings ?? []), ...(r.recommendation?.warnings ?? [])];
+  if (warns.length) {
+    $('warnings').innerHTML = warns.map(w =>
+      `<div class="warn-item"><span class="warn-ico">⚠</span><span>${esc(w)}</span></div>`
+    ).join('');
+    show('s-warn');
+  } else show('s-warn', false);
 
-  // Recommendation
+  // Store rankings
   if (r.recommendation?.ranked?.length) {
-    const cards = r.recommendation.ranked.map((s, i) => {
-      const pills = [
-        `Stock ${pct(s.stockCoverageScore)}`,
-        `Convenience ${pct(s.convenienceScore)}`,
-        s.distanceScore != null ? `Distance ${pct(s.distanceScore)}` : null,
-        s.priceScore != null ? `Price ${pct(s.priceScore)}` : null,
+    const rankClass = ['r1', 'r2', 'r3'];
+    $('stores').innerHTML = r.recommendation.ranked.map((s, i) => {
+      const scores = [
+        { l: 'Stock', v: s.stockCoverageScore },
+        { l: 'Conv',  v: s.convenienceScore },
+        s.distanceScore != null ? { l: 'Dist',  v: s.distanceScore } : null,
+        s.priceScore    != null ? { l: 'Price', v: s.priceScore }    : null,
       ].filter(Boolean);
-      const items = (s.itemDetails ?? []).map((d) =>
-        `<span class="item-detail ${d.sufficient ? "item-ok" : "item-miss"}">${esc(d.itemNo)}: ${d.available ?? "?"}/${d.requested}</span>`
-      ).join(" &nbsp; ");
-      return `<div class="store-card">
-        <span class="store-rank">#${i + 1}</span>
-        <span class="store-name">${esc(s.store?.label ?? s.store?.storeId ?? "?")}</span>
-        <span class="store-score">${pct(s.totalScore)}</span>
-        <div class="score-bar">${pills.map((p) => `<span class="score-pill">${esc(p)}</span>`).join("")}</div>
-        ${items ? `<div class="score-bar">${items}</div>` : ""}
+
+      const bars = scores.map(sc =>
+        `<div class="score-seg">
+          <span>${sc.l}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct(sc.v)}"></div></div>
+          <span>${pct(sc.v)}</span>
+        </div>`
+      ).join('');
+
+      const chips = (s.itemDetails ?? []).map(d => {
+        const prod = pmap[d.itemNo];
+        const name = prod ? prod.name : '';
+        return `<span class="chip ${d.sufficient ? 'ok' : 'bad'}">
+          ${name ? `<span class="chip-name">${esc(name)}</span>` : ''}
+          <span class="chip-id">${esc(d.itemNo)}</span>
+          <span class="chip-qty">${d.available ?? '?'} ${d.sufficient ? '✓' : '✗'}</span>
+        </span>`;
+      }).join('');
+
+      return `<div class="store-card ${rankClass[i] ?? ''}">
+        <div class="store-top">
+          <span class="store-rank">#${i + 1}</span>
+          <span class="store-name">${esc(s.store?.label ?? s.store?.storeId ?? '?')}</span>
+          <span class="score-chip">${pct(s.totalScore)}</span>
+        </div>
+        <div class="score-row">${bars}</div>
+        ${chips ? `<div class="item-chips">${chips}</div>` : ''}
       </div>`;
-    }).join("");
-    $("store-cards").innerHTML = cards;
+    }).join('');
 
     const pts = r.recommendation.explanationPoints ?? [];
     if (pts.length) {
-      $("explanation").innerHTML = `<ul class="explanation-list">${pts.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
-    } else {
-      $("explanation").innerHTML = "";
-    }
-    $("rec-section").style.display = "";
-  } else {
-    $("rec-section").style.display = "none";
-  }
+      $('expl').innerHTML = `<ul>${pts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>`;
+      show('expl');
+    } else show('expl', false);
+    show('s-rec');
+  } else show('s-rec', false);
+
+  // Products
+  const prods = r.products ?? [];
+  if (prods.length) {
+    $('prod-grid').innerHTML = prods.map(p => {
+      const variant = [p.designText, p.measureText].filter(Boolean).join(' · ');
+      const price = p.price ? `${p.price.currency} ${p.price.amount}` : null;
+      return `<div class="prod-card">
+        <div class="prod-name">${esc(p.name)}</div>
+        ${variant ? `<div class="prod-variant">${esc(variant)}</div>` : ''}
+        <div class="prod-sku">${esc(p.itemNo)}</div>
+        ${price ? `<div class="prod-price">${esc(price)}</div>` : ''}
+        ${p.url ? `<a class="prod-link" href="${esc(p.url)}" target="_blank" rel="noopener">View ↗</a>` : ''}
+      </div>`;
+    }).join('');
+    show('s-products');
+  } else show('s-products', false);
 
   // Citations
   if (r.citations?.length) {
-    $("citations").innerHTML = r.citations.map((c) =>
-      c.url
-        ? `<div class="citation"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a></div>`
-        : `<div class="citation">${esc(c.label)}</div>`
-    ).join("");
-    $("citations-section").style.display = "";
-  } else {
-    $("citations-section").style.display = "none";
-  }
+    $('citations').innerHTML = r.citations.map(c =>
+      `<div class="cit"><span class="cit-dot"></span>${c.url
+        ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a>`
+        : esc(c.label)}</div>`
+    ).join('');
+    show('s-citations');
+  } else show('s-citations', false);
 
-  // Retrieved Knowledge
+  // Knowledge
   if (r.retrievedKnowledge?.length) {
-    $("knowledge").innerHTML = r.retrievedKnowledge.map((k) =>
-      `<div style="margin-bottom:8px"><strong>${esc(k.title)}</strong> <span class="score-pill">${pct(k.score)}</span><br/><span style="font-size:.85rem">${esc(k.content)}</span></div>`
-    ).join("");
-    $("knowledge-section").style.display = "";
-  } else {
-    $("knowledge-section").style.display = "none";
-  }
-
-  // Tool Calls
-  if (r.toolCallsUsed?.length) {
-    $("tools").innerHTML = r.toolCallsUsed.map((t) =>
-      `<div class="tool-row">
-        <span class="tool-name">${esc(t.tool)}</span>
-        <span class="${t.success ? "tool-ok" : "tool-fail"}">${t.success ? "✓" : "✗"}</span>
-        <span class="tool-duration">${t.durationMs}ms</span>
-        <span style="color:var(--muted);font-size:.75rem">[${esc(t.retailer)}]</span>
+    $('knowledge').innerHTML = r.retrievedKnowledge.map(k =>
+      `<div class="know-item">
+        <div class="know-head">
+          <span class="know-title">${esc(k.title)}</span>
+          <span class="know-score">${pct(k.score)}</span>
+        </div>
+        <div class="know-body">${esc(k.content)}</div>
       </div>`
-    ).join("");
-    $("tools-section").style.display = "";
-  } else {
-    $("tools-section").style.display = "none";
-  }
+    ).join('');
+    show('s-knowledge');
+  } else show('s-knowledge', false);
 
-  $("response").classList.add("visible");
+  // Tool calls
+  if (r.toolCallsUsed?.length) {
+    $('tools').innerHTML = r.toolCallsUsed.map(t =>
+      `<div class="tool-row">
+        <span class="tool-nm">${esc(t.tool)}</span>
+        <span class="${t.success ? 't-ok' : 't-fail'}">${t.success ? '✓' : '✗'}</span>
+        <span class="tool-ms">${t.durationMs}ms</span>
+        <span class="tool-rt">[${esc(t.retailer)}]</span>
+      </div>`
+    ).join('');
+    show('s-tools');
+  } else show('s-tools', false);
+
+  $('results').classList.add('show');
+  setTimeout(() => $('results').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
 }
 
-function pct(n) {
-  return n == null ? "—" : (n * 100).toFixed(0) + "%";
-}
+// ── Init ──
+initGeo();
 </script>
 </body>
 </html>

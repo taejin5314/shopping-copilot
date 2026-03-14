@@ -16,6 +16,8 @@ export const QueryInput = z.object({
       lng: z.number().min(-180).max(180),
     })
     .optional(),
+  /** Search radius in km. Only stores within this distance of `location` are queried. */
+  radiusKm: z.number().positive().max(500).optional(),
   cart: z
     .array(
       z.object({

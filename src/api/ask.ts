@@ -52,7 +52,7 @@ export async function ask(
     );
   }
 
-  const { query, retailer: retailerKey, countryCode, locationText, location, cart } = parsed.data;
+  const { query, retailer: retailerKey, countryCode, locationText, location, radiusKm, cart } = parsed.data;
   // Auto-detect retailer from query text when not explicitly specified.
   const resolvedRetailerKey = retailerKey ??
     Object.keys(config.retailers ?? {}).find((id) => new RegExp(`\\b${id}\\b`, "i").test(query));
@@ -69,7 +69,7 @@ export async function ask(
     }
   }
 
-  const context: QueryContext = { retailer: retailerKey, countryCode, location: resolvedLocation, cart };
+  const context: QueryContext = { retailer: retailerKey, countryCode, location: resolvedLocation, radiusKm, cart };
 
   // No explicit retailer → query all registered retailers in parallel.
   const allEntries: RetailerEntry[] = [

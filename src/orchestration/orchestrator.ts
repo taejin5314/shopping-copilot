@@ -19,6 +19,7 @@ import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
 import type { GeoCoord } from "../domain/geo.js";
+import { haversineKm } from "../domain/geo.js";
 
 // ──────────────────────────────────────────────
 // Orchestration — routes intent → adapters/RAG → scorer → response
@@ -40,8 +41,10 @@ export interface QueryContext {
   retailer?: string;
   /** Override country code. */
   countryCode?: string;
-  /** User location for distance-based scoring. */
+  /** User location for distance-based scoring and radius filtering. */
   location?: GeoCoord;
+  /** Only query stores within this distance of `location`. Omit to query all stores. */
+  radiusKm?: number;
   /** Pre-parsed cart items (skip extraction from query). */
   cart?: CartItem[];
 }
@@ -89,7 +92,7 @@ export async function handleQuery(
         warnings.push("No item numbers detected in the query. Please specify the item numbers you are looking for.");
       } else {
         try {
-          const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
+          const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls, context);
           const itemPrices = await fetchItemPrices(adapter, cart, countryCode, toolCalls);
           const scoringCtx: ScoringContext = {
             userLocation: context?.location,
@@ -100,7 +103,7 @@ export async function handleQuery(
           const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
           recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
           if (!context?.location) {
-            warnings.push("No user location provided — distance scoring was not applied.");
+            warnings.push("No user location provided — distance scoring and radius filtering were not applied.");
           }
           if (!itemPrices) {
             warnings.push("Price data not available — price scoring was not applied.");
@@ -178,7 +181,7 @@ export async function handleQuery(
           // not just a flat product list. Limit to top 3 products to avoid excess API calls.
           try {
             const topCart: CartItem[] = products.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
-            const storeStocks = await fetchStoreStocks(adapter, topCart, countryCode, intent, config, toolCalls);
+            const storeStocks = await fetchStoreStocks(adapter, topCart, countryCode, intent, config, toolCalls, context);
             const scoringCtx: ScoringContext = { userLocation: context?.location };
             const ranked = rankStores(storeStocks, topCart, undefined, scoringCtx);
             recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
@@ -243,8 +246,24 @@ async function fetchStoreStocks(
   intent: ClassifiedIntent,
   config: OrchestratorConfig,
   toolCalls: ToolCallRecord[],
+  context?: QueryContext,
 ): Promise<StoreStock[]> {
-  const storeIds = intent.storeHints.length > 0 ? intent.storeHints : undefined;
+  // Explicit store hints always take priority over radius filtering.
+  let storeIds: string[] | undefined =
+    intent.storeHints.length > 0 ? intent.storeHints : undefined;
+
+  // If the user supplied a location + radius, pre-filter to nearby stores only.
+  // This avoids fetching inventory for hundreds of stores the user can't reach.
+  if (!storeIds && context?.location && context.radiusKm) {
+    const allStores = await adapter.listStores(countryCode);
+    const nearby = allStores.filter((s) => {
+      if (!s.coords) return true; // no coords → include conservatively
+      return haversineKm(context.location!, s.coords) <= context.radiusKm!;
+    });
+    if (nearby.length === 0) return []; // no stores in range
+    storeIds = nearby.map((s) => s.storeId);
+  }
+
   return timed(
     () => adapter.findStoresForCart(cart, {
       storeIds,

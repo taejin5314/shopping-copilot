@@ -13,6 +13,7 @@ import type {
 import { CopilotError } from "../../core/types.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { IKEA_STORE_COORDS } from "./store-coords.js";
 
 // ──────────────────────────────────────────────
 // IKEA adapter — calls ikea-mcp tools via MCP SDK client
@@ -23,7 +24,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
  */
 interface McpStore {
   storeId: string;
-  label: string;
+  storeLabel: string;
+  countryCode?: string;
 }
 
 interface McpProductHit {
@@ -111,14 +113,15 @@ export class IkeaAdapter implements RetailerAdapter {
   }
 
   async listStores(countryCode?: string): Promise<StoreRef[]> {
-    const result = await this.callTool<McpStore[]>(
+    const result = await this.callTool<{ stores: McpStore[] }>(
       "list_stores",
       countryCode ? { countryCode } : {},
     );
-    return result.map((s) => ({
+    return result.stores.map((s) => ({
       retailer: this.retailerId,
       storeId: s.storeId,
-      label: s.label,
+      label: s.storeLabel,
+      coords: IKEA_STORE_COORDS[s.storeId],
     }));
   }
 
@@ -166,7 +169,7 @@ export class IkeaAdapter implements RetailerAdapter {
       },
     );
     return result.map((r) => ({
-      store: { retailer: this.retailerId, storeId: r.storeId, label: r.storeLabel },
+      store: { retailer: this.retailerId, storeId: r.storeId, label: r.storeLabel, coords: IKEA_STORE_COORDS[r.storeId] },
       items: r.items.map((i) => ({
         itemNo: i.itemNo,
         available: i.sufficient,
