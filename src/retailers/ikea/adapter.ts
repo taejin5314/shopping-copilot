@@ -76,26 +76,38 @@ export class IkeaAdapter implements RetailerAdapter {
     this.apiKey = config.apiKey;
   }
 
-  /** Lazily connect MCP client on first use. */
+  /** Lazily connect MCP client on first use, with retry for cold-start race. */
   private async getClient(): Promise<Client> {
     if (this.client) return this.client;
 
-    const headers: Record<string, string> = {};
-    if (this.apiKey) headers["x-api-key"] = this.apiKey;
+    const maxRetries = 3;
+    const retryDelayMs = 2000;
 
-    const transport = new StreamableHTTPClientTransport(
-      new URL(this.mcpUrl),
-      { requestInit: { headers } },
-    );
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const headers: Record<string, string> = {};
+      if (this.apiKey) headers["x-api-key"] = this.apiKey;
 
-    this.client = new Client({ name: "shopping-copilot", version: "0.1.0" });
-    try {
-      await this.client.connect(transport);
-    } catch (err) {
-      this.client = null;
-      throw new CopilotError("TOOL_FAILURE", `Failed to connect to ikea-mcp: ${String(err)}`, "ikea", err);
+      const transport = new StreamableHTTPClientTransport(
+        new URL(this.mcpUrl),
+        { requestInit: { headers } },
+      );
+
+      const client = new Client({ name: "shopping-copilot", version: "0.1.0" });
+      try {
+        await client.connect(transport);
+        this.client = client;
+        return this.client;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          console.error(`ikea-mcp connection attempt ${attempt}/${maxRetries} failed, retrying in ${retryDelayMs}ms...`);
+          await new Promise((r) => setTimeout(r, retryDelayMs));
+        } else {
+          throw new CopilotError("TOOL_FAILURE", `Failed to connect to ikea-mcp: ${String(err)}`, "ikea", err);
+        }
+      }
     }
-    return this.client;
+
+    throw new CopilotError("TOOL_FAILURE", "Failed to connect to ikea-mcp after retries", "ikea");
   }
 
   async listStores(countryCode?: string): Promise<StoreRef[]> {
