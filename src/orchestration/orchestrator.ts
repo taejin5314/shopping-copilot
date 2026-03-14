@@ -136,16 +136,21 @@ export async function handleQuery(
       let searchQuery = query;
       if (config.llmProvider) {
         const translated = await extractSearchTerms(query, config.llmProvider);
+        console.error(`[orchestrator] keyword extraction: "${query}" → "${translated}"`);
         if (translated) searchQuery = translated;
+      } else {
+        console.error("[orchestrator] no llmProvider configured — skipping keyword extraction");
       }
 
       try {
+        console.error(`[orchestrator] product search fallback query: "${searchQuery}"`);
         const products = await timed(
           () => adapter.searchProducts(searchQuery, { countryCode, maxResults: 5 }),
           "search_products",
           adapter.retailerId,
           toolCalls,
         );
+        console.error(`[orchestrator] product search returned ${products.length} results`);
         if (products.length > 0) {
           intent.type = "product_info";
           foundProducts = products;
@@ -155,7 +160,8 @@ export async function handleQuery(
         } else {
           warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
         }
-      } catch {
+      } catch (err) {
+        console.error("[orchestrator] product search fallback failed:", err);
         warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
       }
     }
