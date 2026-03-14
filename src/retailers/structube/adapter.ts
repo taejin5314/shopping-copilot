@@ -179,7 +179,7 @@ export class StructubeAdapter implements RetailerAdapter {
     if (skus.length === 0) return [];
     try {
       const data = await this.gql<{ inventory: { items: GqlInventoryItem[] } }>(
-        `query($skus: [String]!) {
+        `query($skus: [String!]!) {
           inventory(skus: $skus) { items { sku region_id quantity status } }
         }`,
         { skus },

@@ -178,7 +178,8 @@ export async function handleQuery(
               warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
             }
             warnings.push(...recommendation.warnings);
-          } catch {
+          } catch (rankErr) {
+            console.error("[orchestrator] store ranking after product search failed:", rankErr);
             // Non-fatal: products are still returned even if store ranking fails
           }
         } else {

@@ -138,13 +138,23 @@ async function queryAll(
     .sort((a, b) => b.totalScore - a.totalScore);
   const recommendation: RecommendationResult | null = allRanked.length > 0 ? {
     ranked: allRanked.slice(0, config.maxStoreResults ?? 5),
-    explanationPoints: valid.flatMap((r) => r.recommendation?.explanationPoints ?? []),
+    // Deduplicate explanation points that repeat across retailers with identical store data
+    explanationPoints: [...new Set(valid.flatMap((r) => r.recommendation?.explanationPoints ?? []))],
     warnings: [...new Set(valid.flatMap((r) => r.recommendation?.warnings ?? []))],
   } : null;
 
   const knowledge = valid.flatMap((r) => r.retrievedKnowledge);
   const warnings = [...new Set(valid.flatMap((r) => r.warnings))];
   const base = valid[0];
+  // Deduplicate citations by URL (same product may appear from multiple retailer entries)
+  const seenUrls = new Set<string>();
+  const citations = valid.flatMap((r) => r.citations).filter((c) => {
+    if (c.url === null) return true; // keep null-URL citations as-is
+    if (seenUrls.has(c.url)) return false;
+    seenUrls.add(c.url);
+    return true;
+  });
+
   const answer = config.synthesizer
     ? await config.synthesizer.synthesize({ query, intent: base.intent, recommendation, knowledge, products: [], warnings })
         .catch(() => fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products: [], warnings }))
@@ -156,7 +166,7 @@ async function queryAll(
     retrievedKnowledge: knowledge,
     recommendation,
     answer,
-    citations: valid.flatMap((r) => r.citations),
+    citations,
     warnings,
   };
 }
