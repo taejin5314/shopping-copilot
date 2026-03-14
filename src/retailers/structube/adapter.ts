@@ -10,69 +10,101 @@ import type {
   ProductRef,
 } from "../../core/types.js";
 import { CopilotError } from "../../core/types.js";
-import { STRUCTUBE_STORES, type StructubeStore } from "./stores.js";
 
 // ──────────────────────────────────────────────
-// Structube adapter — proves multi-retailer abstraction
+// Structube adapter — Magento 2 GraphQL backend
+// Endpoint: https://www.structube.com/graphql
 //
-// Uses Structube's public web endpoints for product search.
-// Stock checking is limited: Structube does not expose per-store
-// inventory via public API, so we return online-only availability.
+// Inventory is regional (province-level), not per individual store.
+// The province → region_id mapping was discovered empirically via
+// the getCustomerRegion GraphQL query with postal codes from each province.
 // ──────────────────────────────────────────────
 
-/** Raw product shape from Structube's search endpoint. */
-interface StructubeSearchHit {
+const ENDPOINT = "https://www.structube.com/graphql";
+
+// Maps Structube province names to their regional inventory IDs.
+const PROVINCE_REGION: Record<string, number> = {
+  "Alberta": 66,
+  "British Columbia": 67,
+  "Manitoba": 68,
+  "New Brunswick": 70,
+  "Nova Scotia": 71,
+  "Ontario": 74,
+  "Quebec": 76,
+  "Saskatchewan": 77,
+};
+
+// ── Raw GraphQL shapes ──
+
+interface GqlStoreItem {
+  identifier: string;
+  short_name: string;
+  city: string;
+  /** Province name, e.g. "Ontario" — used to look up region_id */
+  region: string;
+  country_id: string;
+  latitude: number;
+  longitude: number;
+}
+
+interface GqlProductItem {
   sku: string;
   name: string;
-  type_id: string;
-  price: number;
-  url: string;
-  description?: string;
+  url_key: string;
+  url_suffix: string;
+  price: { regularPrice: { amount: { value: number; currency: string } } };
+}
+
+interface GqlInventoryItem {
+  sku: string;
+  region_id: number;
+  quantity: number;
+  /** "IN_STOCK" | "OUT_OF_STOCK" */
+  status: string;
 }
 
 export interface StructubeAdapterConfig {
-  /** Base URL for Structube website (default: https://www.structube.com). */
-  baseUrl?: string;
-  /** Language/country: "en_ca" or "fr_ca" (default: "en_ca"). */
-  locale?: string;
   /** Override fetch for testing. */
   fetch?: typeof globalThis.fetch;
 }
 
 export class StructubeAdapter implements RetailerAdapter {
   readonly retailerId = "structube" as const;
-  private readonly baseUrl: string;
-  private readonly locale: string;
   private readonly fetch: typeof globalThis.fetch;
 
+  /**
+   * Lazy store cache: loaded once, then reused.
+   * Holds stores list + storeId→regionId mapping for inventory lookup.
+   */
+  private _storeData: Promise<{
+    stores: StoreRef[];
+    regionById: Map<string, number>;
+  }> | null = null;
+
   constructor(config?: StructubeAdapterConfig) {
-    this.baseUrl = (config?.baseUrl ?? "https://www.structube.com").replace(/\/+$/, "");
-    this.locale = config?.locale ?? "en_ca";
     this.fetch = config?.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
   async listStores(countryCode?: string): Promise<StoreRef[]> {
-    // Structube only operates in Canada
-    if (countryCode && countryCode.toUpperCase() !== "CA") {
-      return [];
-    }
-    return STRUCTUBE_STORES.map(toStoreRef);
+    if (countryCode && countryCode.toUpperCase() !== "CA") return [];
+    const { stores } = await this.loadStoreData();
+    return stores;
   }
 
   async searchProducts(query: string, opts?: SearchOpts): Promise<ProductInfo[]> {
-    const maxResults = opts?.maxResults ?? 5;
-    const url = `${this.baseUrl}/${this.locale}/rest/V1/search/products?q=${encodeURIComponent(query)}&pageSize=${maxResults}`;
-
-    let data: { items?: StructubeSearchHit[] };
+    const pageSize = opts?.maxResults ?? 5;
+    let data: { products: { items: GqlProductItem[] } };
     try {
-      const res = await this.fetch(url, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      data = await res.json() as { items?: StructubeSearchHit[] };
+      data = await this.gql(
+        `query($q: String!, $n: Int!) {
+          products(search: $q, pageSize: $n) {
+            items { sku name url_key url_suffix
+              price { regularPrice { amount { value currency } } }
+            }
+          }
+        }`,
+        { q: query, n: pageSize },
+      );
     } catch (err) {
       throw new CopilotError(
         "TOOL_FAILURE",
@@ -81,67 +113,165 @@ export class StructubeAdapter implements RetailerAdapter {
         err,
       );
     }
-
-    return (data.items ?? []).slice(0, maxResults).map((hit) => this.mapProduct(hit));
+    return data.products.items.map((p) => this.mapProduct(p));
   }
 
   async checkStock(items: ProductRef[], storeIds: string[]): Promise<StoreStock[]> {
-    // Structube does not expose per-store stock via public API.
-    // Return online-only availability for each requested store.
-    return storeIds.map((storeId) => {
-      const store = STRUCTUBE_STORES.find((s) => s.storeId === storeId);
-      return {
-        store: store ? toStoreRef(store) : { retailer: this.retailerId, storeId, label: storeId },
-        items: items.map((item) => ({
-          itemNo: item.itemNo,
-          available: false,
-          quantity: null,
-          stockLevel: "UNKNOWN" as const,
-          canNotify: null,
-        })),
-      };
-    });
+    const skus = items.map((i) => i.itemNo);
+    const [{ stores, regionById }, inventory] = await Promise.all([
+      this.loadStoreData(),
+      this.fetchInventory(skus),
+    ]);
+    const regionStock = buildRegionStockMap(inventory);
+    const filtered = storeIds.length > 0
+      ? stores.filter((s) => storeIds.includes(s.storeId))
+      : stores;
+    return filtered.map((store) =>
+      buildStoreStock(store, skus, regionStock, regionById.get(store.storeId)),
+    );
   }
 
   async findStoresForCart(
     items: Array<{ itemNo: string; quantity: number }>,
     opts?: FindStoresOpts,
   ): Promise<StoreStock[]> {
-    // Without per-store stock data, return all matching stores with unknown availability.
-    // The scoring engine will rank them low, and warnings will explain the limitation.
-    const stores = opts?.storeIds
-      ? STRUCTUBE_STORES.filter((s) => opts.storeIds!.includes(s.storeId))
-      : STRUCTUBE_STORES;
-
-    const limited = stores.slice(0, opts?.maxResults ?? 5);
-
-    return limited.map((store) => ({
-      store: toStoreRef(store),
-      items: items.map((item) => ({
-        itemNo: item.itemNo,
-        available: false,
-        quantity: null,
-        stockLevel: "UNKNOWN" as const,
-        canNotify: null,
-      })),
-    }));
+    if (opts?.countryCode && opts.countryCode.toUpperCase() !== "CA") return [];
+    const skus = items.map((i) => i.itemNo);
+    const [{ stores, regionById }, inventory] = await Promise.all([
+      this.loadStoreData(),
+      this.fetchInventory(skus),
+    ]);
+    const regionStock = buildRegionStockMap(inventory);
+    let filtered = opts?.storeIds
+      ? stores.filter((s) => opts.storeIds!.includes(s.storeId))
+      : stores;
+    filtered = filtered.slice(0, opts?.maxResults ?? 20);
+    return filtered.map((store) =>
+      buildStoreStock(store, skus, regionStock, regionById.get(store.storeId), items),
+    );
   }
 
   // ── Internal ──
 
-  private mapProduct(hit: StructubeSearchHit): ProductInfo {
+  private loadStoreData() {
+    if (!this._storeData) {
+      this._storeData = this.gql<{ absoStores: { items: GqlStoreItem[] } }>(
+        `{ absoStores(use_in_pickup: true) {
+          items { identifier short_name city region country_id latitude longitude }
+        } }`,
+      ).then((data) => {
+        const stores = data.absoStores.items.map(toStoreRef);
+        const regionById = new Map(
+          data.absoStores.items.map(
+            (s) => [s.identifier, PROVINCE_REGION[s.region] ?? 0] as const,
+          ),
+        );
+        return { stores, regionById };
+      }).catch((err) => {
+        this._storeData = null; // allow retry on next call
+        throw err;
+      });
+    }
+    return this._storeData;
+  }
+
+  private async fetchInventory(skus: string[]): Promise<GqlInventoryItem[]> {
+    if (skus.length === 0) return [];
+    try {
+      const data = await this.gql<{ inventory: { items: GqlInventoryItem[] } }>(
+        `query($skus: [String]!) {
+          inventory(skus: $skus) { items { sku region_id quantity status } }
+        }`,
+        { skus },
+      );
+      return data.inventory.items;
+    } catch (err) {
+      throw new CopilotError(
+        "TOOL_FAILURE",
+        `Structube inventory lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+        "structube",
+        err,
+      );
+    }
+  }
+
+  private async gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+    const res = await this.fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "shopping-copilot/1.0",
+        "Store": "en_ca",
+      },
+      body: JSON.stringify(variables ? { query, variables } : { query }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json() as { data?: T; errors?: Array<{ message: string }> };
+    if (json.errors?.length) throw new Error(json.errors[0].message);
+    if (!json.data) throw new Error("empty GraphQL response");
+    return json.data;
+  }
+
+  private mapProduct(p: GqlProductItem): ProductInfo {
     return {
       retailer: this.retailerId,
-      itemNo: hit.sku,
-      name: hit.name,
-      typeName: hit.type_id ?? "product",
-      price: hit.price != null ? { amount: hit.price, currency: "CAD" } : null,
-      url: hit.url.startsWith("http") ? hit.url : `${this.baseUrl}/${this.locale}/${hit.url}`,
+      itemNo: p.sku,
+      name: p.name,
+      typeName: "product",
+      price: {
+        amount: p.price.regularPrice.amount.value,
+        currency: p.price.regularPrice.amount.currency,
+      },
+      url: `https://www.structube.com/en_ca/${p.url_key}${p.url_suffix ?? ""}`,
       measureText: null,
     };
   }
 }
 
-function toStoreRef(s: StructubeStore): StoreRef {
-  return { retailer: s.retailer, storeId: s.storeId, label: s.label };
+// ── Pure helpers ──
+
+function toStoreRef(s: GqlStoreItem): StoreRef {
+  return {
+    retailer: "structube",
+    storeId: s.identifier,
+    label: s.short_name,
+    coords: { lat: s.latitude, lng: s.longitude },
+  };
+}
+
+/** Build a nested map: region_id → sku → { quantity, status } */
+function buildRegionStockMap(
+  inventory: GqlInventoryItem[],
+): Map<number, Map<string, { quantity: number; status: string }>> {
+  const map = new Map<number, Map<string, { quantity: number; status: string }>>();
+  for (const inv of inventory) {
+    if (!map.has(inv.region_id)) map.set(inv.region_id, new Map());
+    map.get(inv.region_id)!.set(inv.sku, { quantity: inv.quantity, status: inv.status });
+  }
+  return map;
+}
+
+function buildStoreStock(
+  store: StoreRef,
+  skus: string[],
+  regionStock: Map<number, Map<string, { quantity: number; status: string }>>,
+  regionId: number | undefined,
+  cart?: Array<{ itemNo: string; quantity: number }>,
+): StoreStock {
+  const stockMap = regionId ? regionStock.get(regionId) : undefined;
+  return {
+    store,
+    items: skus.map((sku) => {
+      const inv = stockMap?.get(sku);
+      const requested = cart?.find((c) => c.itemNo === sku)?.quantity ?? 1;
+      return {
+        itemNo: sku,
+        available: inv !== undefined ? inv.quantity >= requested : false,
+        quantity: inv?.quantity ?? null,
+        stockLevel: inv?.status ?? "UNKNOWN",
+        canNotify: null,
+      };
+    }),
+  };
 }
