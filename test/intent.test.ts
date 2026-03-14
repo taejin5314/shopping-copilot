@@ -101,3 +101,20 @@ describe("classifyIntent", () => {
     assert.ok(r.storeHints.includes("1129"));
   });
 });
+
+describe("classifyIntent — non-English", () => {
+  it("returns unknown for Korean query", () => {
+    const r = classifyIntent("가장 저렴하지만 퀄리티 좋은 소파 침대 찾아줘");
+    assert.equal(r.type, "unknown");
+  });
+
+  it("returns unknown for Japanese query", () => {
+    const r = classifyIntent("カラックスの在庫を確認してください");
+    assert.equal(r.type, "unknown");
+  });
+
+  it("still extracts item numbers from non-English queries", () => {
+    const r = classifyIntent("30275861 재고 확인해줘");
+    assert.ok(r.itemNos.includes("30275861"));
+  });
+});

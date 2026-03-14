@@ -229,3 +229,29 @@ describe("Multi-retailer routing", () => {
     );
   });
 });
+
+describe("Cart overrides unknown intent", () => {
+  const adapter = new StructubeAdapter({ fetch: mockFetch(SEARCH_RESPONSE) });
+  const retriever = new KeywordRetriever(STRUCTUBE_CORPUS);
+
+  it("non-English query with cart triggers stock path", async () => {
+    const result = await handleQuery(
+      "가장 저렴하지만 퀄리티 좋은 소파 침대 찾아줘",
+      { adapter, retriever, maxStoreResults: 3 },
+      { cart: [{ itemNo: "SKU-001", quantity: 1 }] },
+    );
+    // Intent should be overridden to stock
+    assert.equal(result.intent.type, "stock");
+    // Should have a recommendation (stock path ran)
+    assert.ok(result.recommendation != null);
+  });
+
+  it("unknown query without cart stays unknown", async () => {
+    const result = await handleQuery(
+      "가장 저렴하지만 퀄리티 좋은 소파 침대 찾아줘",
+      { adapter, retriever, maxStoreResults: 3 },
+    );
+    assert.equal(result.intent.type, "unknown");
+    assert.equal(result.recommendation, null);
+  });
+});

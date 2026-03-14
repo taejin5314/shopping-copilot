@@ -45,9 +45,16 @@ export async function handleQuery(
   config: OrchestratorConfig,
   context?: QueryContext,
 ): Promise<CopilotResponse> {
-  const intent = classifyIntent(query);
+  const intent: ClassifiedIntent = classifyIntent(query);
   const toolCalls: ToolCallRecord[] = [];
   const warnings: string[] = [];
+
+  // If user provided a cart, treat as stock query regardless of intent classification.
+  // This handles non-English queries and ambiguous intents where the cart is a strong signal.
+  const hasExplicitCart = (context?.cart?.length ?? 0) > 0;
+  if (hasExplicitCart && intent.type === "unknown") {
+    intent.type = "stock";
+  }
   let recommendation: RecommendationResult | null = null;
   let retrievedKnowledge: PolicyHit[] = [];
   const citations: Citation[] = [];
