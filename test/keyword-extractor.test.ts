@@ -16,14 +16,15 @@ function throwingProvider(): LlmProvider {
 }
 
 describe("extractSearchTerms", () => {
-  it("returns null for ASCII-only queries", async () => {
-    const result = await extractSearchTerms("sofa bed", fakeProvider("should not be called"));
-    assert.equal(result, null);
+  it("normalises English query with noise words via LLM", async () => {
+    // ASCII queries now also go through LLM so noise words like "quality" can be stripped
+    const result = await extractSearchTerms("quality sofa bed", fakeProvider("sofa bed"));
+    assert.equal(result, "sofa bed");
   });
 
   it("extracts English keywords from Korean query", async () => {
-    const result = await extractSearchTerms("퀄리티 좋은 소파 침대", fakeProvider("quality sofa bed"));
-    assert.equal(result, "quality sofa bed");
+    const result = await extractSearchTerms("퀄리티 좋은 소파 침대", fakeProvider("sofa bed"));
+    assert.equal(result, "sofa bed");
   });
 
   it("extracts English keywords from Japanese query", async () => {

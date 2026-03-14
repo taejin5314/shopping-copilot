@@ -6,18 +6,19 @@ import type { LlmProvider } from "./provider.js";
 // ──────────────────────────────────────────────
 
 const EXTRACT_PROMPT =
-  "Translate the following product-related query into concise English search keywords suitable for an IKEA product search API. " +
+  "Extract the core product search keywords from the following query. " +
+  "Translate to English if needed, then strip adjectives, quality descriptors, and filler words — keep only the essential product terms. " +
   "Return ONLY the keywords, nothing else. No explanation, no quotes, no punctuation — just space-separated English words.";
 
 /**
- * Returns `null` if the query is already ASCII-only or extraction fails.
+ * Normalises any query into concise English product keywords.
+ * Handles both non-English translation and English noise-word removal.
+ * Returns `null` on failure or if the LLM returns nothing useful.
  */
 export async function extractSearchTerms(
   query: string,
   provider: LlmProvider,
 ): Promise<string | null> {
-  // Skip if query is already ASCII (likely English)
-  if (/^[\x00-\x7F]*$/.test(query)) return null;
 
   try {
     const response = await provider.complete(
