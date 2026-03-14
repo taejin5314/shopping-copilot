@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import { createHttpServer } from "../src/api/server.js";
 import { IkeaAdapter } from "../src/retailers/ikea/adapter.js";
-import { StubRetriever } from "../src/rag/retriever.js";
+import { KeywordRetriever } from "../src/rag/keyword-retriever.js";
+import { IKEA_CORPUS } from "../src/rag/corpus.js";
 
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:3000";
 const PORT = 4123; // test-only port
@@ -24,7 +25,7 @@ before(async () => {
 
   const config = {
     adapter: new IkeaAdapter({ mcpBaseUrl: MCP_URL }),
-    retriever: new StubRetriever(),
+    retriever: new KeywordRetriever(IKEA_CORPUS),
     maxStoreResults: 3,
   };
   server = createHttpServer(config);
@@ -76,6 +77,12 @@ describe("HTTP /ask — live", () => {
     assert.ok(json.answer, "has answer");
     assert.ok(Array.isArray(json.warnings), "has warnings array");
     assert.ok(Array.isArray(json.toolCallsUsed), "has toolCallsUsed array");
+    const knowledge = json.retrievedKnowledge as Array<{ title: string }>;
+    assert.ok(knowledge.length > 0, "retrieved real policy docs");
+    assert.ok(
+      knowledge.some((d) => d.title.toLowerCase().includes("return") || d.title.toLowerCase().includes("exchange")),
+      "at least one doc is about returns/exchange",
+    );
   });
 
   it("returns 200 with recommendation for stock query (live MCP)", async () => {
