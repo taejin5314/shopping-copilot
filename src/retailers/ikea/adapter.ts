@@ -11,9 +11,11 @@ import type {
   ItemAvailability,
 } from "../../core/types.js";
 import { CopilotError } from "../../core/types.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 // ──────────────────────────────────────────────
-// IKEA adapter — calls ikea-mcp tools over HTTP
+// IKEA adapter — calls ikea-mcp tools via MCP SDK client
 // ──────────────────────────────────────────────
 
 /**
@@ -65,12 +67,35 @@ export interface IkeaAdapterConfig {
 
 export class IkeaAdapter implements RetailerAdapter {
   readonly retailerId = "ikea" as const;
-  private readonly baseUrl: string;
+  private readonly mcpUrl: string;
   private readonly apiKey: string | undefined;
+  private client: Client | null = null;
 
   constructor(config: IkeaAdapterConfig) {
-    this.baseUrl = config.mcpBaseUrl.replace(/\/+$/, "");
+    this.mcpUrl = config.mcpBaseUrl.replace(/\/+$/, "") + "/mcp";
     this.apiKey = config.apiKey;
+  }
+
+  /** Lazily connect MCP client on first use. */
+  private async getClient(): Promise<Client> {
+    if (this.client) return this.client;
+
+    const headers: Record<string, string> = {};
+    if (this.apiKey) headers["x-api-key"] = this.apiKey;
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL(this.mcpUrl),
+      { requestInit: { headers } },
+    );
+
+    this.client = new Client({ name: "shopping-copilot", version: "0.1.0" });
+    try {
+      await this.client.connect(transport);
+    } catch (err) {
+      this.client = null;
+      throw new CopilotError("TOOL_FAILURE", `Failed to connect to ikea-mcp: ${String(err)}`, "ikea", err);
+    }
+    return this.client;
   }
 
   async listStores(countryCode?: string): Promise<StoreRef[]> {
@@ -142,40 +167,23 @@ export class IkeaAdapter implements RetailerAdapter {
   // ── Internal helpers ──
 
   private async callTool<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
-    const url = `${this.baseUrl}/mcp`;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (this.apiKey) headers["x-api-key"] = this.apiKey;
-
-    // MCP Streamable HTTP: JSON-RPC request
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: toolName, arguments: args },
-    });
-
-    let response: Response;
+    let result;
     try {
-      response = await fetch(url, { method: "POST", headers, body });
+      const client = await this.getClient();
+      result = await client.callTool({ name: toolName, arguments: args });
     } catch (err) {
-      throw new CopilotError("TOOL_FAILURE", `Failed to reach ikea-mcp: ${String(err)}`, "ikea", err);
+      if (err instanceof CopilotError) throw err;
+      throw new CopilotError("TOOL_FAILURE", `ikea-mcp call failed for ${toolName}: ${String(err)}`, "ikea", err);
     }
 
-    if (!response.ok) {
-      throw new CopilotError(
-        "TOOL_FAILURE",
-        `ikea-mcp returned ${response.status} for ${toolName}`,
-        "ikea",
-      );
+    const content = result.content as Array<{ type: string; text?: string }>;
+
+    if (result.isError) {
+      const msg = content?.[0]?.text ?? "unknown tool error";
+      throw new CopilotError("TOOL_FAILURE", `ikea-mcp error: ${msg}`, "ikea");
     }
 
-    const json = await response.json() as { result?: { content?: Array<{ text?: string }> }; error?: { message: string } };
-
-    if (json.error) {
-      throw new CopilotError("TOOL_FAILURE", `ikea-mcp error: ${json.error.message}`, "ikea");
-    }
-
-    const text = json.result?.content?.[0]?.text;
+    const text = content?.[0]?.text;
     if (!text) {
       throw new CopilotError("TOOL_FAILURE", `Empty response from ikea-mcp ${toolName}`, "ikea");
     }

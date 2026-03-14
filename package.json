@@ -8,13 +8,16 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "test": "node --import tsx/esm --test test/**/*.test.ts",
+    "test": "node --import tsx/esm --test test/intent.test.ts test/scoring.test.ts",
+    "test:integration": "node --import tsx/esm --test test/integration.test.ts",
+    "test:all": "node --import tsx/esm --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {

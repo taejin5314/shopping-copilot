@@ -56,10 +56,15 @@ export async function handleQuery(
       if (cart.length === 0) {
         warnings.push("No item numbers detected in the query. Please include IKEA item numbers.");
       } else {
-        const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
-        const ranked = rankStores(storeStocks, cart);
-        recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
-        warnings.push(...recommendation.warnings);
+        try {
+          const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
+          const ranked = rankStores(storeStocks, cart);
+          recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
+          warnings.push(...recommendation.warnings);
+        } catch (err) {
+          const msg = err instanceof CopilotError ? err.message : String(err);
+          warnings.push(`Stock lookup failed: ${msg}`);
+        }
       }
     }
 
