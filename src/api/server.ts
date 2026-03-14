@@ -17,6 +17,7 @@ const INDEX_HTML = readFileSync(
 );
 
 const BODY_LIMIT = 256 * 1024; // 256 KB
+const BUILD_TS = new Date().toISOString();
 
 function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -61,7 +62,7 @@ export function createHttpServer(config: CopilotConfig) {
       }
 
       if (url === "/health" && method === "GET") {
-        sendJson(res, 200, { status: "ok" });
+        sendJson(res, 200, { status: "ok", build: BUILD_TS, version: "0.1.1" });
         return;
       }
 

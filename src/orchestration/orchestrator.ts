@@ -53,6 +53,7 @@ export async function handleQuery(
   // This handles non-English queries and ambiguous intents where the cart is a strong signal.
   const hasExplicitCart = (context?.cart?.length ?? 0) > 0;
   if (hasExplicitCart && intent.type === "unknown") {
+    console.error(`[orchestrator] Cart override: unknown → stock (cart has ${context!.cart!.length} items)`);
     intent.type = "stock";
   }
   let recommendation: RecommendationResult | null = null;
