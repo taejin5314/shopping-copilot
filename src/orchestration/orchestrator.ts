@@ -6,6 +6,7 @@ import type {
   Citation,
   StoreStock,
   ClassifiedIntent,
+  ProductInfo,
 } from "../core/types.js";
 import { CopilotError } from "../core/types.js";
 import type { RetailerAdapter } from "../core/adapter.js";
@@ -58,6 +59,7 @@ export async function handleQuery(
   }
   let recommendation: RecommendationResult | null = null;
   let retrievedKnowledge: PolicyHit[] = [];
+  let foundProducts: ProductInfo[] = [];
   const citations: Citation[] = [];
 
   const { adapter, retriever } = config;
@@ -110,25 +112,45 @@ export async function handleQuery(
     // ── Product info path ──
     if (intent.type === "product_info" && intent.itemNos.length > 0) {
       // Delegate to search — lightweight for now
-      const products = await timed(
+      foundProducts = await timed(
         () => adapter.searchProducts(intent.itemNos[0], { countryCode }),
         "search_products",
         adapter.retailerId,
         toolCalls,
       );
-      if (products.length > 0) {
-        citations.push({ label: products[0].name, url: products[0].url });
+      if (foundProducts.length > 0) {
+        citations.push({ label: foundProducts[0].name, url: foundProducts[0].url });
       }
     }
 
-    // ── Unknown intent ──
+    // ── Unknown intent — product search fallback ──
     if (intent.type === "unknown") {
-      warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+      // If query text exists but intent is unrecognized (e.g. non-English),
+      // try a product search as a best-effort fallback.
+      try {
+        const products = await timed(
+          () => adapter.searchProducts(query, { countryCode, maxResults: 5 }),
+          "search_products",
+          adapter.retailerId,
+          toolCalls,
+        );
+        if (products.length > 0) {
+          intent.type = "product_info";
+          foundProducts = products;
+          for (const p of products) {
+            if (p.url) citations.push({ label: p.name, url: p.url });
+          }
+        } else {
+          warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+        }
+      } catch {
+        warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+      }
     }
 
     const answer = config.synthesizer
-      ? await config.synthesizer.synthesize({ query, intent, recommendation, knowledge: retrievedKnowledge, warnings })
-      : fallbackAnswer({ query, intent, recommendation, knowledge: retrievedKnowledge, warnings });
+      ? await config.synthesizer.synthesize({ query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings })
+      : fallbackAnswer({ query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings });
 
     return {
       intent,

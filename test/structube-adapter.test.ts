@@ -246,12 +246,14 @@ describe("Cart overrides unknown intent", () => {
     assert.ok(result.recommendation != null);
   });
 
-  it("unknown query without cart stays unknown", async () => {
+  it("unknown query without cart falls back to product search", async () => {
     const result = await handleQuery(
       "가장 저렴하지만 퀄리티 좋은 소파 침대 찾아줘",
       { adapter, retriever, maxStoreResults: 3 },
     );
-    assert.equal(result.intent.type, "unknown");
-    assert.equal(result.recommendation, null);
+    // Product search fallback should override intent to product_info
+    assert.equal(result.intent.type, "product_info");
+    assert.ok(result.citations.length > 0, "should have product citations");
+    assert.ok(result.toolCallsUsed.some((t) => t.tool === "search_products"));
   });
 });

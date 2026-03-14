@@ -3,6 +3,7 @@ import type {
   ClassifiedIntent,
   RecommendationResult,
   PolicyHit,
+  ProductInfo,
 } from "../core/types.js";
 
 // ──────────────────────────────────────────────
@@ -14,6 +15,8 @@ export interface SynthesisInput {
   intent: ClassifiedIntent;
   recommendation: RecommendationResult | null;
   knowledge: PolicyHit[];
+  /** Product search results (e.g. from product_info fallback). */
+  products?: ProductInfo[];
   warnings: string[];
 }
 
@@ -64,6 +67,16 @@ export function fallbackAnswer(input: SynthesisInput): string {
     parts.push("Relevant policy information:");
     for (const hit of knowledge) {
       parts.push(`  - ${hit.title}: ${hit.content.slice(0, 200)}`);
+    }
+  }
+
+  const products = input.products ?? [];
+  if (products.length > 0) {
+    parts.push("Matching products:");
+    for (const p of products) {
+      const price = p.price ? ` — ${p.price.currency} ${p.price.amount}` : "";
+      parts.push(`  - ${p.name} (${p.itemNo})${price}`);
+      if (p.url) parts.push(`    ${p.url}`);
     }
   }
 
@@ -120,6 +133,15 @@ function buildPrompt(input: SynthesisInput): LlmMessage[] {
     evidenceParts.push("\n## Retrieved Policy Knowledge");
     for (const hit of input.knowledge) {
       evidenceParts.push(`- [${hit.title}](${hit.source}): ${hit.content}`);
+    }
+  }
+
+  const products = input.products ?? [];
+  if (products.length > 0) {
+    evidenceParts.push("\n## Product Search Results");
+    for (const p of products) {
+      const price = p.price ? ` — ${p.price.currency} ${p.price.amount}` : "";
+      evidenceParts.push(`- ${p.name} (${p.itemNo})${price}${p.url ? ` [link](${p.url})` : ""}`);
     }
   }
 
