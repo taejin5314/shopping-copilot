@@ -28,6 +28,10 @@
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
   textarea{resize:vertical;min-height:64px}
 
+  .toggle-advanced{background:none;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;padding:0;text-decoration:underline}
+  .advanced-fields{display:none;margin-top:8px}
+  .advanced-fields.open{display:flex;gap:12px;flex-wrap:wrap}
+
   .cart-hint{font-size:.75rem;color:var(--muted)}
   .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:6px;padding:10px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s}
   .btn-primary{background:var(--accent);color:#fff}
@@ -106,13 +110,24 @@
         <label for="country">Country</label>
         <input id="country" type="text" maxlength="2" placeholder="US" />
       </div>
-      <div class="field">
-        <label for="lat">Latitude</label>
-        <input id="lat" type="number" step="any" placeholder="43.65" />
+      <div class="field" style="flex:2">
+        <label for="location-text">Location</label>
+        <input id="location-text" type="text" placeholder='e.g. "Toronto", "M5V 2H1", "90210"' />
       </div>
-      <div class="field">
-        <label for="lng">Longitude</label>
-        <input id="lng" type="number" step="any" placeholder="-79.38" />
+    </div>
+    <div class="form-row">
+      <div class="field field-full">
+        <button type="button" class="toggle-advanced" onclick="document.getElementById('adv').classList.toggle('open')">Advanced: raw lat/lng</button>
+        <div id="adv" class="advanced-fields">
+          <div class="field">
+            <label for="lat">Latitude</label>
+            <input id="lat" type="number" step="any" placeholder="43.65" />
+          </div>
+          <div class="field">
+            <label for="lng">Longitude</label>
+            <input id="lng" type="number" step="any" placeholder="-79.38" />
+          </div>
+        </div>
       </div>
     </div>
     <div class="form-row">
@@ -192,6 +207,8 @@ async function handleSubmit() {
   if (retailer) body.retailer = retailer;
   const country = $("country").value.trim().toUpperCase();
   if (country) body.countryCode = country;
+  const locationText = $("location-text").value.trim();
+  if (locationText) body.locationText = locationText;
   const lat = parseFloat($("lat").value);
   const lng = parseFloat($("lng").value);
   if (Number.isFinite(lat) && Number.isFinite(lng)) body.location = { lat, lng };

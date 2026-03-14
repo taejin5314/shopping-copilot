@@ -6,6 +6,8 @@ import { CopilotError } from "../core/types.js";
 import type { RetailerAdapter } from "../core/adapter.js";
 import type { RagRetriever } from "../rag/retriever.js";
 import type { Synthesizer } from "../llm/synthesizer.js";
+import { geocode } from "../domain/geocode.js";
+import type { GeocodeOptions } from "../domain/geocode.js";
 
 // ──────────────────────────────────────────────
 // API entrypoint — single function surface
@@ -25,6 +27,8 @@ export interface CopilotConfig {
   retailers?: Record<string, RetailerEntry>;
   synthesizer?: Synthesizer;
   maxStoreResults?: number;
+  /** Options forwarded to the geocoder (e.g. injectable fetch for tests). */
+  geocodeOptions?: GeocodeOptions;
 }
 
 /**
@@ -43,8 +47,20 @@ export async function ask(
     );
   }
 
-  const { query, retailer: retailerKey, countryCode, location, cart } = parsed.data;
+  const { query, retailer: retailerKey, countryCode, locationText, location, cart } = parsed.data;
   const { adapter, retriever } = resolveRetailer(retailerKey, config);
+
+  // Resolve location: explicit coords take priority, then geocode locationText.
+  let resolvedLocation = location;
+  const warnings: string[] = [];
+  if (!resolvedLocation && locationText) {
+    const result = await geocode(locationText, config.geocodeOptions);
+    if (result) {
+      resolvedLocation = result.coords;
+    } else {
+      warnings.push(`Could not resolve location "${locationText}". Distance scoring disabled.`);
+    }
+  }
 
   const orchConfig: OrchestratorConfig = {
     adapter,
@@ -53,7 +69,15 @@ export async function ask(
     maxStoreResults: config.maxStoreResults,
   };
 
-  return handleQuery(query, orchConfig, { retailer: retailerKey, countryCode, location, cart });
+  const response = await handleQuery(query, orchConfig, {
+    retailer: retailerKey,
+    countryCode,
+    location: resolvedLocation,
+    cart,
+  });
+  // Prepend geocode warnings so they appear first.
+  response.warnings = [...warnings, ...response.warnings];
+  return response;
 }
 
 function resolveRetailer(

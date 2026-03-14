@@ -8,6 +8,8 @@ export const QueryInput = z.object({
   query: z.string().min(1).max(2000),
   retailer: z.string().optional(),
   countryCode: z.string().length(2).toUpperCase().optional(),
+  /** Free-text location (city, postal code, address). Resolved to coords server-side. */
+  locationText: z.string().max(200).optional(),
   location: z
     .object({
       lat: z.number().min(-90).max(90),
