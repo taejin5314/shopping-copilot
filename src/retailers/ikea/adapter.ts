@@ -32,8 +32,8 @@ interface McpProductHit {
   typeName: string;
   salesPrice: { amount: number; currencyCode: string };
   pipUrl: string;
-  designText: string | null;
-  measureText: string | null;
+  designText?: string | null;
+  measureText?: string | null;
 }
 
 interface McpStockRow {
@@ -123,7 +123,7 @@ export class IkeaAdapter implements RetailerAdapter {
   }
 
   async searchProducts(query: string, opts?: SearchOpts): Promise<ProductInfo[]> {
-    const result = await this.callTool<{ results: McpProductHit[]; total: number }>(
+    const result = await this.callTool<{ items?: McpProductHit[]; results?: McpProductHit[]; total?: number }>(
       "search_products",
       {
         query,
@@ -132,7 +132,8 @@ export class IkeaAdapter implements RetailerAdapter {
         size: opts?.maxResults ?? 5,
       },
     );
-    return result.results.map((p) => this.mapProduct(p));
+    const hits = result.items ?? result.results ?? [];
+    return hits.map((p) => this.mapProduct(p));
   }
 
   async checkStock(items: ProductRef[], storeIds: string[]): Promise<StoreStock[]> {
@@ -211,7 +212,7 @@ export class IkeaAdapter implements RetailerAdapter {
       typeName: p.typeName,
       price: p.salesPrice ? { amount: p.salesPrice.amount, currency: p.salesPrice.currencyCode } : null,
       url: p.pipUrl,
-      measureText: p.measureText,
+      measureText: p.measureText ?? null,
     };
   }
 
