@@ -65,11 +65,20 @@ export async function handleQuery(
       } else {
         try {
           const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
-          const scoringCtx: ScoringContext = { userLocation: context?.location };
+          const itemPrices = await fetchItemPrices(adapter, cart, countryCode, toolCalls);
+          const scoringCtx: ScoringContext = {
+            userLocation: context?.location,
+            getItemPrice: itemPrices
+              ? (_storeId, itemNo) => itemPrices[itemNo] ?? null
+              : undefined,
+          };
           const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
           recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
           if (!context?.location) {
             warnings.push("No user location provided — distance scoring was not applied.");
+          }
+          if (!itemPrices) {
+            warnings.push("Price data not available — price scoring was not applied.");
           }
           warnings.push(...recommendation.warnings);
         } catch (err) {
@@ -175,6 +184,36 @@ async function fetchPolicy(
     retailerId,
     toolCalls,
   );
+}
+
+/**
+ * Best-effort price lookup for cart items via searchProducts.
+ * Returns a map of itemNo → unit price, or undefined if no prices found.
+ */
+async function fetchItemPrices(
+  adapter: RetailerAdapter,
+  cart: CartItem[],
+  countryCode: string | undefined,
+  toolCalls: ToolCallRecord[],
+): Promise<Record<string, number> | undefined> {
+  const prices: Record<string, number> = {};
+  for (const item of cart) {
+    try {
+      const products = await timed(
+        () => adapter.searchProducts(item.itemNo, { countryCode, maxResults: 5 }),
+        "search_products_price",
+        adapter.retailerId,
+        toolCalls,
+      );
+      const match = products.find((p) => p.itemNo === item.itemNo);
+      if (match?.price) {
+        prices[item.itemNo] = match.price.amount;
+      }
+    } catch {
+      // Individual item price lookup failure is non-fatal
+    }
+  }
+  return Object.keys(prices).length > 0 ? prices : undefined;
 }
 
 async function timed<T>(

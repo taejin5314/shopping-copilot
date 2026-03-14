@@ -19,10 +19,10 @@ export interface ScoringWeights {
 }
 
 const DEFAULT_WEIGHTS: ScoringWeights = {
-  stockCoverage: 0.6,
-  convenience: 0.3,
+  stockCoverage: 0.5,
+  convenience: 0.25,
   distance: 0.1,
-  price: 0.0, // not yet implemented
+  price: 0.15,
 };
 
 export interface CartItem {
@@ -33,6 +33,8 @@ export interface CartItem {
 export interface ScoringContext {
   /** User's location for distance scoring. */
   userLocation?: GeoCoord;
+  /** Resolve unit price for an item at a specific store. Return null if unknown. */
+  getItemPrice?: (storeId: string, itemNo: string) => number | null;
 }
 
 /**
@@ -95,14 +97,64 @@ export function rankStores(
   weights?: ScoringWeights,
   ctx?: ScoringContext,
 ): ScoredStore[] {
-  return storeStocks
-    .map((ss) => scoreStore(ss, cart, weights, ctx))
-    .sort((a, b) => {
-      const scoreDiff = b.totalScore - a.totalScore;
-      if (scoreDiff !== 0) return scoreDiff;
-      // Tie-break: alphabetical by storeId
-      return a.store.storeId.localeCompare(b.store.storeId);
-    });
+  const w = weights ?? DEFAULT_WEIGHTS;
+  const scored = storeStocks.map((ss) => scoreStore(ss, cart, w, ctx));
+
+  // Price normalization: requires getItemPrice and non-zero weight
+  if (ctx?.getItemPrice && w.price > 0) {
+    applyPriceScores(scored, cart, ctx.getItemPrice, w);
+  }
+
+  return scored.sort((a, b) => {
+    const scoreDiff = b.totalScore - a.totalScore;
+    if (scoreDiff !== 0) return scoreDiff;
+    // Tie-break: alphabetical by storeId
+    return a.store.storeId.localeCompare(b.store.storeId);
+  });
+}
+
+/**
+ * Post-process: normalize price scores across candidates.
+ * Cheapest store gets 1.0, most expensive gets 0.0.
+ * Equal prices all get 1.0. Stores without prices are left null.
+ */
+function applyPriceScores(
+  scored: ScoredStore[],
+  cart: CartItem[],
+  getPrice: (storeId: string, itemNo: string) => number | null,
+  weights: ScoringWeights,
+): void {
+  const costs: (number | null)[] = scored.map((s) => {
+    let total = 0;
+    let hasPrice = false;
+    for (const item of cart) {
+      const price = getPrice(s.store.storeId, item.itemNo);
+      if (price !== null) {
+        total += price * item.quantity;
+        hasPrice = true;
+      }
+    }
+    return hasPrice ? total : null;
+  });
+
+  const validCosts = costs.filter((c): c is number => c !== null);
+  if (validCosts.length < 2) return;
+
+  const minCost = Math.min(...validCosts);
+  const maxCost = Math.max(...validCosts);
+  const range = maxCost - minCost;
+
+  for (let i = 0; i < scored.length; i++) {
+    const cost = costs[i];
+    if (cost === null) continue;
+    const ps = range === 0 ? 1.0 : 1 - (cost - minCost) / range;
+    scored[i].priceScore = ps;
+    scored[i].totalScore =
+      scored[i].stockCoverageScore * weights.stockCoverage +
+      scored[i].convenienceScore * weights.convenience +
+      (scored[i].distanceScore ?? 0) * weights.distance +
+      ps * weights.price;
+  }
 }
 
 /**
@@ -145,6 +197,12 @@ export function buildRecommendation(
   if (best.distanceScore !== null) {
     explanationPoints.push(
       `Distance score: ${(best.distanceScore * 100).toFixed(0)}%`,
+    );
+  }
+
+  if (best.priceScore !== null) {
+    explanationPoints.push(
+      `Price score: ${(best.priceScore * 100).toFixed(0)}%`,
     );
   }
 
