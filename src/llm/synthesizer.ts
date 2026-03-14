@@ -96,7 +96,7 @@ export function fallbackAnswer(input: SynthesisInput): string {
 
 // ── Prompt construction ──
 
-const SYSTEM_PROMPT = `You are a helpful IKEA shopping assistant. Your job is to synthesize a clear, concise answer from the structured evidence provided.
+const SYSTEM_PROMPT = `You are a helpful shopping assistant. Your job is to synthesize a clear, concise answer from the structured evidence provided.
 
 Rules:
 - Only state facts present in the provided evidence.

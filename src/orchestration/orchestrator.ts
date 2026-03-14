@@ -75,7 +75,7 @@ export async function handleQuery(
       const cart = context?.cart ?? cartFromIntent(intent);
 
       if (cart.length === 0) {
-        warnings.push("No item numbers detected in the query. Please include IKEA item numbers.");
+        warnings.push("No item numbers detected in the query. Please specify the item numbers you are looking for.");
       } else {
         try {
           const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls);
@@ -162,6 +162,24 @@ export async function handleQuery(
           foundProducts = products;
           for (const p of products) {
             if (p.url) citations.push({ label: p.name, url: p.url });
+          }
+          // Auto-rank stores for the found products so the user gets a recommendation,
+          // not just a flat product list. Limit to top 3 products to avoid excess API calls.
+          try {
+            const topCart: CartItem[] = products.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
+            const storeStocks = await fetchStoreStocks(adapter, topCart, countryCode, intent, config, toolCalls);
+            const scoringCtx: ScoringContext = { userLocation: context?.location };
+            const ranked = rankStores(storeStocks, topCart, undefined, scoringCtx);
+            recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
+            const allStockUnknown = storeStocks.every((ss) =>
+              ss.items.every((item) => item.stockLevel === "UNKNOWN"),
+            );
+            if (allStockUnknown) {
+              warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
+            }
+            warnings.push(...recommendation.warnings);
+          } catch {
+            // Non-fatal: products are still returned even if store ranking fails
           }
         } else {
           warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
