@@ -41,4 +41,11 @@ describe("extractSearchTerms", () => {
     const result = await extractSearchTerms("소파", throwingProvider());
     assert.equal(result, null);
   });
+
+  it("translates 시계 to wall clock (not wristwatch) for home furnishing context", async () => {
+    // In a home furnishing store context, 시계 should resolve to wall clock.
+    // The updated prompt adds this context so Claude won't return "watch".
+    const result = await extractSearchTerms("시계", fakeProvider("wall clock"));
+    assert.equal(result, "wall clock");
+  });
 });

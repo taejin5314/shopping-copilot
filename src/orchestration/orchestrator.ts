@@ -15,6 +15,7 @@ import type { Synthesizer } from "../llm/synthesizer.js";
 import { fallbackAnswer } from "../llm/synthesizer.js";
 import type { LlmProvider } from "../llm/provider.js";
 import { extractSearchTerms } from "../llm/keyword-extractor.js";
+import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
@@ -149,17 +150,26 @@ export async function handleQuery(
 
     // ── Unknown intent — product search fallback ──
     if (intent.type === "unknown") {
-      // If query text exists but intent is unrecognized (e.g. non-English),
-      // try a product search as a best-effort fallback.
-      // If the original query contains non-ASCII characters AND we have an LLM,
-      // translate to English keywords first so the retailer API can understand.
-      let searchQuery = query;
-      if (config.llmProvider) {
+      // Step 1: domain-aware pre-normalization (no LLM, handles known ambiguities
+      // across languages: "watch"→wall clock, "시계"→wall clock, "tapis"→rug, …)
+      const norm = normalizeForRetail(query);
+      let searchQuery = norm.normalizedQuery;
+      console.error(`[orchestrator] retail normalize: "${query}" → "${searchQuery}" (${norm.confidence})`);
+
+      // Step 2: LLM translation — only for low-confidence results (non-ASCII,
+      // no map hit). High/medium confidence means the normalizer already produced
+      // a usable English term; calling the LLM on top would be redundant.
+      if (norm.confidence === "low" && config.llmProvider) {
         const translated = await extractSearchTerms(query, config.llmProvider);
-        console.error(`[orchestrator] keyword extraction: "${query}" → "${translated}"`);
-        if (translated) searchQuery = translated;
-      } else {
-        console.error("[orchestrator] no llmProvider configured — skipping keyword extraction");
+        console.error(`[orchestrator] llm extraction: "${query}" → "${translated}"`);
+        if (translated) {
+          searchQuery = translated;
+        } else {
+          warnings.push("Search term could not be translated to English. Try searching in English for best results.");
+        }
+      } else if (norm.confidence === "low") {
+        // Non-ASCII, no map hit, no LLM available
+        warnings.push("Search term appears to be non-English. Try searching in English for best results.");
       }
 
       try {
@@ -197,7 +207,10 @@ export async function handleQuery(
             // Non-fatal: products are still returned even if store ranking fails
           }
         } else {
-          warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+          const nonEnglishHint = norm.confidence === "low" && searchQuery === norm.normalizedQuery
+            ? " Your query appears to be non-English — try searching in English."
+            : "";
+          warnings.push(`Could not find products matching your query.${nonEnglishHint} Try asking about stock availability, store comparison, or return policies.`);
         }
       } catch (err) {
         console.error("[orchestrator] product search fallback failed:", err);

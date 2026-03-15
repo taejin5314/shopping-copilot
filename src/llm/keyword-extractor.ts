@@ -5,9 +5,13 @@ import type { LlmProvider } from "./provider.js";
 // to English product search terms via a fast LLM call.
 // ──────────────────────────────────────────────
 
+// Prompt carries only retailer context — no language-specific examples.
+// Known ambiguities (시계→wall clock, mat→rug, etc.) are resolved upstream
+// by the retail query normalizer before this function is called.
 const EXTRACT_PROMPT =
-  "Extract the core product search keywords from the following query. " +
-  "Translate to English if needed, then strip adjectives, quality descriptors, and filler words — keep only the essential product terms. " +
+  "Extract the core product search keywords for a home furnishings and furniture retailer. " +
+  "Translate to English if needed. " +
+  "Strip adjectives, quality descriptors, and filler words — keep only essential product terms. " +
   "Return ONLY the keywords, nothing else. No explanation, no quotes, no punctuation — just space-separated English words.";
 
 /**

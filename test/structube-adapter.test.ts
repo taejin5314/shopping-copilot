@@ -6,6 +6,7 @@ import { STRUCTUBE_CORPUS } from "../src/rag/structube-corpus.js";
 import { handleQuery } from "../src/orchestration/orchestrator.js";
 import { ask } from "../src/api/ask.js";
 import type { CopilotConfig } from "../src/api/ask.js";
+import type { LlmProvider, LlmResponse } from "../src/llm/provider.js";
 import type { Response } from "undici";
 
 // ── Mock helpers ──
@@ -306,5 +307,84 @@ describe("Cart overrides unknown intent", () => {
     assert.equal(result.intent.type, "product_info");
     assert.ok(result.citations.length > 0, "should have product citations");
     assert.ok(result.toolCallsUsed.some((t) => t.tool === "search_products"));
+  });
+});
+
+// ── Cross-language search flow regression ──
+// Tests the normalizeForRetail pre-normalization layer + LLM fallback path.
+
+describe("cross-language product search regression", () => {
+  it("시계 resolved by normalizer (high confidence) — no LLM call needed", async () => {
+    // normalizeForRetail("시계") → "wall clock" (high confidence).
+    // LLM should NOT be called; the normalizer handles it deterministically.
+    const adapter = new StructubeAdapter({ fetch: gqlMock() });
+    const retriever = new KeywordRetriever(STRUCTUBE_CORPUS);
+    const fakeLlm: LlmProvider = {
+      complete: async () => { throw new Error("LLM should not be called for high-confidence terms"); },
+    };
+
+    const result = await handleQuery(
+      "시계",
+      { adapter, retriever, llmProvider: fakeLlm, maxStoreResults: 3 },
+    );
+
+    assert.equal(result.intent.type, "product_info", "should find products via normalized term");
+    assert.ok((result.products?.length ?? 0) > 0, "should have products");
+    assert.ok(result.toolCallsUsed.some((t) => t.tool === "search_products"));
+  });
+
+  it("English ambiguous term 'mat' resolved by normalizer — no LLM call needed", async () => {
+    const adapter = new StructubeAdapter({ fetch: gqlMock() });
+    const retriever = new KeywordRetriever(STRUCTUBE_CORPUS);
+    const fakeLlm: LlmProvider = {
+      complete: async () => { throw new Error("LLM should not be called for high-confidence terms"); },
+    };
+
+    const result = await handleQuery(
+      "mat",
+      { adapter, retriever, llmProvider: fakeLlm, maxStoreResults: 3 },
+    );
+
+    assert.equal(result.intent.type, "product_info");
+    assert.ok((result.products?.length ?? 0) > 0);
+  });
+
+  it("unknown non-English term 협탁 — LLM called, English warning on failure", async () => {
+    // 협탁 (nightstand) is NOT in the ambiguity map → low confidence → LLM invoked.
+    // When LLM also fails (returns empty), user gets an actionable English hint.
+    const emptyMock = gqlMock({ products: { data: { products: { items: [] } } } });
+    const adapter = new StructubeAdapter({ fetch: emptyMock });
+    const retriever = new KeywordRetriever(STRUCTUBE_CORPUS);
+    const fakeLlm: LlmProvider = {
+      complete: async () => ({ content: "" }) as LlmResponse,
+    };
+
+    const result = await handleQuery(
+      "협탁",
+      { adapter, retriever, llmProvider: fakeLlm, maxStoreResults: 3 },
+    );
+
+    assert.equal(result.intent.type, "unknown");
+    assert.ok(
+      result.warnings.some((w) => w.toLowerCase().includes("english")),
+      "should suggest searching in English when LLM fails",
+    );
+  });
+
+  it("unknown non-English term 협탁 with no llmProvider — English warning", async () => {
+    const emptyMock = gqlMock({ products: { data: { products: { items: [] } } } });
+    const adapter = new StructubeAdapter({ fetch: emptyMock });
+    const retriever = new KeywordRetriever(STRUCTUBE_CORPUS);
+
+    const result = await handleQuery(
+      "협탁",
+      { adapter, retriever, maxStoreResults: 3 }, // no llmProvider
+    );
+
+    assert.equal(result.intent.type, "unknown");
+    assert.ok(
+      result.warnings.some((w) => w.toLowerCase().includes("english")),
+      "should suggest searching in English when no llmProvider",
+    );
   });
 });
