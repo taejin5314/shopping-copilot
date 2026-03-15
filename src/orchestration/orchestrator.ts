@@ -215,12 +215,32 @@ export async function handleQuery(
             if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
           }
           // Auto-rank stores for the found products so the user gets a recommendation,
-          // not just a flat product list. Limit to top 3 products to avoid excess API calls.
+          // not just a flat product list. Fetch all variants in one call, then rank by
+          // the single variant with the best availability — search results are often
+          // color/size variants and requiring all simultaneously produces false "no stock".
           try {
-            const topCart: CartItem[] = products.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
-            const storeStocks = await fetchStoreStocks(adapter, topCart, countryCode, intent, config, toolCalls, context);
+            const variantCart: CartItem[] = products.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
+            const storeStocks = await fetchStoreStocks(adapter, variantCart, countryCode, intent, config, toolCalls, context);
+
+            // Pick the variant SKU with the most stores having it available.
+            const skuAvailCount = new Map<string, number>();
+            for (const ss of storeStocks) {
+              for (const item of ss.items) {
+                if (item.available) skuAvailCount.set(item.itemNo, (skuAvailCount.get(item.itemNo) ?? 0) + 1);
+              }
+            }
+            let bestSku = variantCart[0].itemNo;
+            let bestCount = 0;
+            for (const [sku, count] of skuAvailCount) {
+              if (count > bestCount) { bestCount = count; bestSku = sku; }
+            }
+            const topCart: CartItem[] = [{ itemNo: bestSku, quantity: 1 }];
+            const filteredStocks = storeStocks.map((ss) => ({
+              store: ss.store,
+              items: ss.items.filter((i) => i.itemNo === bestSku),
+            }));
             const scoringCtx: ScoringContext = { userLocation: context?.location };
-            const ranked = rankStores(storeStocks, topCart, undefined, scoringCtx);
+            const ranked = rankStores(filteredStocks, topCart, undefined, scoringCtx);
             recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
             const allStockUnknown = storeStocks.every((ss) =>
               ss.items.every((item) => item.stockLevel === "UNKNOWN"),

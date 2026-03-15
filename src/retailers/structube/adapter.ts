@@ -144,10 +144,12 @@ export class StructubeAdapter implements RetailerAdapter {
       this.fetchInventory(skus),
     ]);
     const regionStock = buildRegionStockMap(inventory);
-    let filtered = opts?.storeIds
+    // Do NOT pre-slice by maxResults here: inventory is fetched for all regions in one
+    // request, so slicing stores early hides valid stock data for stores that happen to
+    // appear later in the API response. The caller limits the final recommendation.
+    const filtered = opts?.storeIds
       ? stores.filter((s) => opts.storeIds!.includes(s.storeId))
       : stores;
-    filtered = filtered.slice(0, opts?.maxResults ?? 20);
     return filtered.map((store) =>
       buildStoreStock(store, skus, regionStock, regionById.get(store.storeId), items),
     );
