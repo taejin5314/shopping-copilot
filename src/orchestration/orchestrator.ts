@@ -36,9 +36,9 @@ export interface OrchestratorConfig {
   maxStoreResults?: number;
   maxProductResults?: number;
   /**
-   * When true, skip LLM synthesis for stock/recommendation intents that have
-   * no retrieved knowledge — the deterministic fallback is sufficient.
-   * Default: false (LLM synthesis is used whenever a synthesizer is provided).
+   * Skip LLM synthesis for stock/recommendation intents that have no retrieved
+   * knowledge — the deterministic fallback is sufficient and faster.
+   * Default: true. Set to false to always use LLM synthesis.
    */
   skipLlmForStructuredResults?: boolean;
 }
@@ -71,7 +71,14 @@ export async function handleQuery(
   config: OrchestratorConfig,
   context?: QueryContext,
 ): Promise<CopilotResponse> {
+  const _t0 = performance.now();
+  const retailer = config.adapter.retailerId;
+  const perf = (label: string, since: number) =>
+    console.error(`[perf][${retailer}] ${label}: ${Math.round(performance.now() - since)}ms`);
+
+  const _tIntent = performance.now();
   const intent: ClassifiedIntent = classifyIntent(query);
+  perf("classifyIntent", _tIntent);
   const toolCalls: ToolCallRecord[] = [];
   const warnings: string[] = [];
 
@@ -147,7 +154,9 @@ export async function handleQuery(
         }
       : null;
 
-    await Promise.all([stockTask?.(), policyTask?.()])
+    const _tStockPolicy = performance.now();
+    await Promise.all([stockTask?.(), policyTask?.()]);
+    if (stockTask || policyTask) perf("stock+policy concurrent", _tStockPolicy);
 
     // ── Product info path ──
     if (intent.type === "product_info" && intent.itemNos.length > 0) {
@@ -175,7 +184,9 @@ export async function handleQuery(
       // no map hit). High/medium confidence means the normalizer already produced
       // a usable English term; calling the LLM on top would be redundant.
       if (norm.confidence === "low" && config.llmProvider) {
+        const _tLlmExtract = performance.now();
         const translated = await extractSearchTerms(query, config.llmProvider);
+        perf("llm keyword extraction", _tLlmExtract);
         console.error(`[orchestrator] llm extraction: "${query}" → "${translated}"`);
         if (translated) {
           searchQuery = translated;
@@ -189,6 +200,7 @@ export async function handleQuery(
 
       try {
         console.error(`[orchestrator] product search fallback query: "${searchQuery}"`);
+        const _tUnknown = performance.now();
         const products = await timed(
           () => adapter.searchProducts(searchQuery, { countryCode, maxResults: config.maxProductResults ?? 3 }),
           "search_products",
@@ -227,6 +239,7 @@ export async function handleQuery(
             : "";
           warnings.push(`Could not find products matching your query.${nonEnglishHint} Try asking about stock availability, store comparison, or return policies.`);
         }
+        perf("product search + auto-rank", _tUnknown);
       } catch (err) {
         console.error("[orchestrator] product search fallback failed:", err);
         warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
@@ -234,13 +247,16 @@ export async function handleQuery(
     }
 
     const structuredOnly =
-      config.skipLlmForStructuredResults === true &&
+      config.skipLlmForStructuredResults !== false &&
       (intent.type === "stock" || intent.type === "recommendation") &&
       retrievedKnowledge.length === 0;
     const synthInput = { query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings };
+    const _tSynth = performance.now();
     const answer = config.synthesizer && !structuredOnly
       ? await config.synthesizer.synthesize(synthInput)
       : fallbackAnswer(synthInput);
+    perf(config.synthesizer && !structuredOnly ? "synthesis (llm)" : "synthesis (fallback)", _tSynth);
+    perf("handleQuery total", _t0);
 
     return {
       intent,

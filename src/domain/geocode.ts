@@ -7,6 +7,11 @@ import type { GeoCoord } from "./geo.js";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT = "ShoppingCopilot/0.1 (portfolio project)";
 
+// In-process cache keyed by normalized location text.
+// Only populated when using the real global fetch (not test-injected fetch).
+// City names and postal codes are stable — no TTL needed within a process lifetime.
+const _geocodeCache = new Map<string, GeocodeResult>();
+
 export interface GeocodeResult {
   coords: GeoCoord;
   /** Display name returned by Nominatim. */
@@ -33,6 +38,14 @@ export async function geocode(
   const trimmed = locationText.trim();
   if (!trimmed) return null;
 
+  // Check cache only when using the real fetch (not a test-injected mock).
+  const useCache = !opts.fetch;
+  const cacheKey = trimmed.toLowerCase();
+  if (useCache) {
+    const hit = _geocodeCache.get(cacheKey);
+    if (hit) return hit;
+  }
+
   const url = new URL(NOMINATIM_URL);
   url.searchParams.set("q", trimmed);
   url.searchParams.set("format", "jsonv2");
@@ -53,10 +66,12 @@ export async function geocode(
     const lng = parseFloat(String(first.lon));
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-    return {
+    const result: GeocodeResult = {
       coords: { lat, lng },
       displayName: typeof first.display_name === "string" ? first.display_name : trimmed,
     };
+    if (useCache) _geocodeCache.set(cacheKey, result);
+    return result;
   } catch {
     return null;
   }

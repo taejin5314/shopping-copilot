@@ -34,6 +34,18 @@ export interface CopilotConfig {
   maxProductResults?: number;
   /** Options forwarded to the geocoder (e.g. injectable fetch for tests). */
   geocodeOptions?: GeocodeOptions;
+  /**
+   * Skip LLM synthesis for stock/recommendation results with no policy knowledge.
+   * Passed through to OrchestratorConfig and applied to the final merged synthesis
+   * in multi-retailer mode. Default: true (matches OrchestratorConfig default).
+   */
+  skipLlmForStructuredResults?: boolean;
+  /**
+   * Per-retailer timeout in milliseconds for multi-retailer queries.
+   * Retailers that exceed this budget are treated as failed (same as a network error).
+   * Default: undefined (disabled). Set conservatively based on measured p90 timings.
+   */
+  retailerTimeoutMs?: number;
 }
 
 /**
@@ -44,6 +56,10 @@ export async function ask(
   rawInput: unknown,
   config: CopilotConfig,
 ): Promise<CopilotResponse> {
+  const _t0 = performance.now();
+  const perf = (label: string, since: number) =>
+    console.error(`[perf][ask] ${label}: ${Math.round(performance.now() - since)}ms`);
+
   const parsed = QueryInput.safeParse(rawInput);
   if (!parsed.success) {
     throw new CopilotError(
@@ -61,7 +77,9 @@ export async function ask(
   let resolvedLocation = location;
   const warnings: string[] = [];
   if (!resolvedLocation && locationText) {
+    const _tGeo = performance.now();
     const result = await geocode(locationText, config.geocodeOptions);
+    perf("geocode", _tGeo);
     if (result) {
       resolvedLocation = result.coords;
     } else {
@@ -77,8 +95,9 @@ export async function ask(
     ...Object.values(config.retailers ?? {}),
   ];
   if (!resolvedRetailerKey && allEntries.length > 1) {
-    const response = await queryAll(allEntries, query, config, context);
+    const response = await queryAll(allEntries, query, config, context, perf);
     response.warnings = [...warnings, ...response.warnings];
+    perf("total", _t0);
     return response;
   }
 
@@ -89,11 +108,15 @@ export async function ask(
     synthesizer: config.synthesizer,
     llmProvider: config.llmProvider,
     maxStoreResults: config.maxStoreResults,
+    skipLlmForStructuredResults: config.skipLlmForStructuredResults,
   };
 
+  const _tQuery = performance.now();
   const response = await handleQuery(query, orchConfig, context);
+  perf(`handleQuery(${adapter.retailerId})`, _tQuery);
   // Prepend geocode warnings so they appear first.
   response.warnings = [...warnings, ...response.warnings];
+  perf("total", _t0);
   return response;
 }
 
@@ -116,10 +139,13 @@ async function queryAll(
   query: string,
   config: CopilotConfig,
   context: QueryContext,
+  perf: (label: string, since: number) => void,
 ): Promise<CopilotResponse> {
+  const _tRetailers = performance.now();
   const responses = await Promise.all(
-    entries.map((entry) =>
-      handleQuery(query, {
+    entries.map((entry) => {
+      const retailerId = entry.adapter.retailerId;
+      let p: Promise<CopilotResponse | null> = handleQuery(query, {
         adapter: entry.adapter,
         retriever: entry.retriever,
         // Do not synthesize per-retailer: queryAll merges and synthesizes once at the end.
@@ -128,11 +154,25 @@ async function queryAll(
         maxStoreResults: config.maxStoreResults,
         maxProductResults: config.maxProductResults,
       }, context).catch((err) => {
-        console.error(`[ask] ${entry.adapter.retailerId} failed:`, err);
+        console.error(`[ask] ${retailerId} failed:`, err);
         return null;
-      }),
-    ),
+      });
+      if (config.retailerTimeoutMs) {
+        const timeout = config.retailerTimeoutMs;
+        p = Promise.race([
+          p,
+          new Promise<null>((resolve) =>
+            setTimeout(() => {
+              console.error(`[ask] ${retailerId} timed out after ${timeout}ms`);
+              resolve(null);
+            }, timeout),
+          ),
+        ]);
+      }
+      return p;
+    }),
   );
+  perf("retailers parallel wall-clock", _tRetailers);
   const valid = responses.filter((r): r is CopilotResponse => r !== null);
   if (valid.length === 0) throw new CopilotError("INTERNAL", "All retailers failed to respond");
 
@@ -167,10 +207,17 @@ async function queryAll(
     return true;
   });
 
-  const answer = config.synthesizer
-    ? await config.synthesizer.synthesize({ query, intent: base.intent, recommendation, knowledge, products, warnings })
-        .catch(() => fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products, warnings }))
-    : fallbackAnswer({ query, intent: base.intent, recommendation, knowledge, products, warnings });
+  const synthInput = { query, intent: base.intent, recommendation, knowledge, products, warnings };
+  const skipSynth =
+    config.skipLlmForStructuredResults !== false &&
+    (base.intent.type === "stock" || base.intent.type === "recommendation") &&
+    knowledge.length === 0;
+  const _tSynth = performance.now();
+  const answer = config.synthesizer && !skipSynth
+    ? await config.synthesizer.synthesize(synthInput)
+        .catch(() => fallbackAnswer(synthInput))
+    : fallbackAnswer(synthInput);
+  perf("final synthesis", _tSynth);
 
   return {
     intent: base.intent,
