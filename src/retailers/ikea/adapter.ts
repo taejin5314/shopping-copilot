@@ -34,6 +34,7 @@ interface McpProductHit {
   typeName: string;
   salesPrice: { amount: number; currencyCode: string };
   pipUrl: string;
+  imageUrl?: string | null;
   designText?: string | null;
   measureText?: string | null;
 }
@@ -217,6 +218,7 @@ export class IkeaAdapter implements RetailerAdapter {
       url: p.pipUrl,
       measureText: p.measureText ?? null,
       designText: p.designText ?? null,
+      imageUrl: p.imageUrl ?? null,
     };
   }
 
