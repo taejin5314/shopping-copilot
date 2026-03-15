@@ -21,6 +21,8 @@ export interface ProductInfo extends ProductRef {
   measureText: string | null;
   /** Color/design variant descriptor (e.g. "Dark blue", "Beige"). */
   designText?: string | null;
+  /** Product thumbnail URL, if provided by the retailer. */
+  imageUrl?: string | null;
 }
 
 // ── Store ──

@@ -459,38 +459,53 @@ select:focus { outline: none; border-color: var(--accent); }
 /* ── Products grid ── */
 .prod-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
+  align-items: start;
 }
 .prod-card {
   border: 1px solid var(--border);
   border-radius: var(--r);
-  padding: 12px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  text-decoration: none;
+  color: inherit;
   transition: border-color .18s, box-shadow .18s, transform .18s;
 }
 .prod-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 3px 14px rgba(37,99,235,.08);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(37,99,235,.1);
+  transform: translateY(-2px);
 }
-.prod-name { font-weight: 600; font-size: .84rem; line-height: 1.3; }
-.prod-variant { font-family: var(--mono); font-size: .68rem; color: var(--text-3); margin-top: 1px; }
-.prod-sku { font-family: var(--mono); font-size: .68rem; color: var(--text-3); }
-.prod-price { font-size: .85rem; font-weight: 700; color: var(--accent); margin-top: 4px; }
-.prod-link {
-  display: inline-flex;
-  align-items: center;
+.prod-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.prod-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--bg);
+  display: block;
+}
+.prod-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
   gap: 3px;
-  font-size: .74rem;
-  color: var(--accent);
-  text-decoration: none;
-  margin-top: 6px;
-  font-weight: 500;
+  flex: 1;
 }
-.prod-link:hover { text-decoration: underline; }
+.prod-price {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -.02em;
+  line-height: 1.2;
+}
+.prod-name { font-weight: 600; font-size: .84rem; line-height: 1.3; margin-top: 4px; }
+.prod-variant { font-family: var(--mono); font-size: .67rem; color: var(--text-3); margin-top: 1px; }
+.prod-meta { font-family: var(--mono); font-size: .65rem; color: var(--text-3); margin-top: 5px; }
 
 /* ── Citations ── */
 .cit {
@@ -855,13 +870,18 @@ function render(r) {
     $('prod-grid').innerHTML = prods.map(p => {
       const variant = [p.designText, p.measureText].filter(Boolean).join(' · ');
       const price = p.price ? `${p.price.currency} ${p.price.amount}` : null;
-      return `<div class="prod-card">
-        <div class="prod-name">${esc(p.name)}</div>
-        ${variant ? `<div class="prod-variant">${esc(variant)}</div>` : ''}
-        <div class="prod-sku">${esc(p.itemNo)}</div>
-        ${price ? `<div class="prod-price">${esc(price)}</div>` : ''}
-        ${p.url ? `<a class="prod-link" href="${esc(p.url)}" target="_blank" rel="noopener">View ↗</a>` : ''}
-      </div>`;
+      // Whole card is the link when a URL is available — no nested <a> inside.
+      const tag = p.url ? 'a' : 'div';
+      const attrs = p.url ? `href="${esc(p.url)}" target="_blank" rel="noopener noreferrer"` : '';
+      return `<${tag} class="prod-card" ${attrs}>
+        ${p.imageUrl ? `<img class="prod-img" src="${esc(p.imageUrl)}" alt="${esc(p.name)}" loading="lazy">` : ''}
+        <div class="prod-body">
+          ${price ? `<div class="prod-price">${esc(price)}</div>` : ''}
+          <div class="prod-name">${esc(p.name)}</div>
+          ${variant ? `<div class="prod-variant">${esc(variant)}</div>` : ''}
+          <div class="prod-meta">${esc(p.retailer)} · ${esc(p.itemNo)}</div>
+        </div>
+      </${tag}>`;
     }).join('');
     show('s-products');
   } else show('s-products', false);

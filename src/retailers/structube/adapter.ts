@@ -53,6 +53,7 @@ interface GqlProductItem {
   url_key: string;
   url_suffix: string;
   price: { regularPrice: { amount: { value: number; currency: string } } };
+  small_image?: { url: string } | null;
 }
 
 interface GqlInventoryItem {
@@ -100,6 +101,7 @@ export class StructubeAdapter implements RetailerAdapter {
           products(search: $q, pageSize: $n) {
             items { sku name url_key url_suffix
               price { regularPrice { amount { value currency } } }
+              small_image { url }
             }
           }
         }`,
@@ -226,6 +228,7 @@ export class StructubeAdapter implements RetailerAdapter {
       url: `https://www.structube.com/en_ca/${p.url_key}${p.url_suffix ?? ""}`,
       measureText: null,
       designText: null,
+      imageUrl: p.small_image?.url ?? null,
     };
   }
 }
