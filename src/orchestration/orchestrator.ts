@@ -85,28 +85,45 @@ export async function handleQuery(
   const toolCalls: ToolCallRecord[] = [];
   const warnings: string[] = [];
 
+  // Snapshot intent after pattern classifier (before any overrides) for observability.
+  const _intentAfterClassifier = intent.type;
+
   // If user provided a cart, treat as stock query regardless of intent classification.
   // This handles non-English queries and ambiguous intents where the cart is a strong signal.
   const hasExplicitCart = (context?.cart?.length ?? 0) > 0;
   if (hasExplicitCart && intent.type === "unknown") {
-    console.error(`[orchestrator] Cart override: unknown → stock (cart has ${context!.cart!.length} items)`);
     intent.type = "stock";
   }
 
-  // Apply router output: upgrade intent when the pattern-based classifier returned "unknown"
-  // and the router has high confidence.  "find_best_store" and "check_cart" both map to
-  // the stock pipeline; "search_product" is already handled by the existing classifier.
+  // Snapshot after cart override, before router override.
+  const _intentAfterCart = intent.type;
+
+  // Apply router output: upgrade intent when the pattern-based classifier returned "unknown".
+  // "find_best_store" and "check_cart" both map to the stock pipeline;
+  // "search_product" is already handled by the existing classifier.
   const ro = context?.routerOutput;
   if (ro && intent.type === "unknown") {
     if (ro.intent === "find_best_store" || ro.intent === "check_cart") {
-      console.error(`[orchestrator] Router override: unknown → stock (router intent=${ro.intent}, confidence=${ro.confidence})`);
       intent.type = "stock";
     } else if (ro.intent === "search_product") {
-      console.error(`[orchestrator] Router override: unknown → product_info (router intent=${ro.intent})`);
       intent.type = "product_info";
     }
   }
-  if (ro?.warnings.length) warnings.push(...ro.warnings);
+
+  // Structured decision log — single line, easy to grep and parse.
+  console.error("[router:decision]", JSON.stringify({
+    patternIntent: _intentAfterClassifier,
+    cartOverrideApplied: _intentAfterClassifier !== _intentAfterCart,
+    routerIntent: ro?.intent ?? null,
+    routerConfidence: ro?.confidence ?? null,
+    routerOverrideApplied: _intentAfterCart !== intent.type,
+    finalIntent: intent.type,
+  }));
+
+  // Merge router warnings, tagged with source so callers can distinguish them.
+  if (ro?.warnings.length) {
+    warnings.push(...ro.warnings.map((w) => `[Router] ${w}`));
+  }
   let recommendation: RecommendationResult | null = null;
   let retrievedKnowledge: PolicyHit[] = [];
   let foundProducts: ProductInfo[] = [];

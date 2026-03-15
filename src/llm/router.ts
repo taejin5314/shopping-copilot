@@ -22,6 +22,26 @@ export const RouterOutputSchema = z.object({
 
 export type RouterOutput = z.infer<typeof RouterOutputSchema>;
 
+// ── Failure types ──
+
+export type RouterFailureReason =
+  | "provider_error"
+  | "invalid_json"
+  | "schema_error"
+  | "empty_response"
+  | "timeout";
+
+export type RouterResult =
+  | { ok: true; output: RouterOutput }
+  | { ok: false; reason: RouterFailureReason; detail?: string };
+
+// ── Options ──
+
+export interface RouterCallOpts {
+  /** Abort the provider call after this many ms and return a timeout failure. */
+  timeoutMs?: number;
+}
+
 // ── System prompt ──
 
 const ROUTER_SYSTEM_PROMPT = `You are the Router Agent for a shopping copilot application.
@@ -163,19 +183,35 @@ Do not include chain-of-thought.
 Do not include hidden reasoning.
 Just provide a short decision summary.`;
 
-// ── Router function ──
+// ── Structured logging ──
+
+function routerLog(fields: Record<string, unknown>): void {
+  console.error("[router]", JSON.stringify(fields));
+}
+
+// ── JSON extraction ──
+
+function extractJson(text: string): string | null {
+  const match = text.match(/\{[\s\S]*\}/);
+  return match ? match[0] : null;
+}
+
+// ── Core implementation ──
 
 /**
- * Routes a user query via Claude, returning a structured RouterOutput.
- * Returns null on any failure (parse error, network error, schema mismatch) —
- * callers must treat null as "router unavailable, proceed with defaults".
+ * Routes a user query and returns a discriminated RouterResult.
+ * Failure reasons are one of: provider_error | invalid_json | schema_error | empty_response | timeout.
+ * Never throws — all errors are captured in the result.
  */
-export async function routeQuery(
+export async function routeQueryDetailed(
   query: string,
   provider: LlmProvider,
-): Promise<RouterOutput | null> {
+  opts?: RouterCallOpts,
+): Promise<RouterResult> {
+  // ── Provider call (with optional timeout) ──
+  let rawContent: string;
   try {
-    const response = await provider.complete(
+    const call = provider.complete(
       [
         { role: "system", content: ROUTER_SYSTEM_PROMPT },
         { role: "user", content: query },
@@ -183,23 +219,84 @@ export async function routeQuery(
       { maxTokens: 300, temperature: 0 },
     );
 
-    const text = response.content.trim();
-    // Strip optional markdown code fences (```json ... ```)
-    const jsonText = text.startsWith("{") ? text : extractJson(text);
-    if (!jsonText) {
-      console.error("[router] no JSON found in response");
-      return null;
+    let response: { content: string };
+    if (opts?.timeoutMs) {
+      let timedOut = false;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => { timedOut = true; reject(new Error("timeout")); }, opts.timeoutMs),
+      );
+      try {
+        response = await Promise.race([call, timeoutPromise]);
+      } catch (err) {
+        const reason: RouterFailureReason = timedOut ? "timeout" : "provider_error";
+        const detail = err instanceof Error ? err.message : String(err);
+        routerLog({ event: "routing_failed", reason, detail });
+        return { ok: false, reason, detail };
+      }
+    } else {
+      response = await call;
     }
-
-    const parsed = JSON.parse(jsonText);
-    return RouterOutputSchema.parse(parsed);
+    rawContent = response.content;
   } catch (err) {
-    console.error("[router] routing failed:", err instanceof Error ? err.message : String(err));
-    return null;
+    const detail = err instanceof Error ? err.message : String(err);
+    routerLog({ event: "routing_failed", reason: "provider_error", detail });
+    return { ok: false, reason: "provider_error", detail };
   }
+
+  // ── Empty response ──
+  const text = rawContent.trim();
+  if (!text) {
+    routerLog({ event: "routing_failed", reason: "empty_response" });
+    return { ok: false, reason: "empty_response" };
+  }
+
+  // ── JSON extraction (strip markdown fences and surrounding prose) ──
+  const jsonText = text.startsWith("{") ? text : extractJson(text);
+  if (!jsonText) {
+    routerLog({ event: "routing_failed", reason: "invalid_json", detail: "no JSON object found in response" });
+    return { ok: false, reason: "invalid_json", detail: "no JSON object found in response" };
+  }
+
+  // ── JSON parse ──
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    routerLog({ event: "routing_failed", reason: "invalid_json", detail });
+    return { ok: false, reason: "invalid_json", detail };
+  }
+
+  // ── Schema validation ──
+  const validated = RouterOutputSchema.safeParse(parsed);
+  if (!validated.success) {
+    const detail = validated.error.issues.map((i) => i.message).join("; ");
+    routerLog({ event: "routing_failed", reason: "schema_error", detail });
+    return { ok: false, reason: "schema_error", detail };
+  }
+
+  routerLog({
+    event: "routing_succeeded",
+    intent: validated.data.intent,
+    retailerScope: validated.data.retailerScope,
+    confidence: validated.data.confidence,
+    nextAgent: validated.data.nextAgent,
+    warningCount: validated.data.warnings.length,
+  });
+
+  return { ok: true, output: validated.data };
 }
 
-function extractJson(text: string): string | null {
-  const match = text.match(/\{[\s\S]*\}/);
-  return match ? match[0] : null;
+/**
+ * Routes a user query via Claude, returning a structured RouterOutput.
+ * Returns null on any failure — callers must treat null as "router unavailable, proceed with defaults".
+ * This is the primary public surface; it preserves the RouterOutput | null contract for existing callers.
+ */
+export async function routeQuery(
+  query: string,
+  provider: LlmProvider,
+  opts?: RouterCallOpts,
+): Promise<RouterOutput | null> {
+  const result = await routeQueryDetailed(query, provider, opts);
+  return result.ok ? result.output : null;
 }
