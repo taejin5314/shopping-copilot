@@ -122,7 +122,8 @@ async function queryAll(
       handleQuery(query, {
         adapter: entry.adapter,
         retriever: entry.retriever,
-        synthesizer: config.synthesizer,
+        // Do not synthesize per-retailer: queryAll merges and synthesizes once at the end.
+        synthesizer: undefined,
         llmProvider: config.llmProvider,
         maxStoreResults: config.maxStoreResults,
         maxProductResults: config.maxProductResults,

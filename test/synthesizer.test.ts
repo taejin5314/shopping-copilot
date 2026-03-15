@@ -151,8 +151,8 @@ describe("LlmSynthesizer", () => {
     assert.equal(messages[0].role, "system");
     assert.equal(messages[1].role, "user");
     assert.ok(messages[1].content.includes("KALLAX"));
-    assert.equal(opts.maxTokens, 512);
-    assert.equal(opts.temperature, 0.3);
+    assert.equal(opts.maxTokens, 250);
+    assert.equal(opts.temperature, 0);
   });
 
   it("includes recommendation evidence in prompt", async () => {

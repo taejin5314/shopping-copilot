@@ -35,6 +35,12 @@ export interface OrchestratorConfig {
   llmProvider?: LlmProvider;
   maxStoreResults?: number;
   maxProductResults?: number;
+  /**
+   * When true, skip LLM synthesis for stock/recommendation intents that have
+   * no retrieved knowledge — the deterministic fallback is sufficient.
+   * Default: false (LLM synthesis is used whenever a synthesizer is provided).
+   */
+  skipLlmForStructuredResults?: boolean;
 }
 
 export interface QueryContext {
@@ -85,54 +91,63 @@ export async function handleQuery(
   const countryCode = context?.countryCode ?? intent.countryCode ?? undefined;
 
   try {
-    // ── Stock / Recommendation path ──
-    if (needsStock(intent)) {
-      const cart = context?.cart ?? cartFromIntent(intent);
-
-      if (cart.length === 0) {
-        warnings.push("No item numbers detected in the query. Please specify the item numbers you are looking for.");
-      } else {
-        try {
-          const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls, context);
-          const itemPrices = await fetchItemPrices(adapter, cart, countryCode, toolCalls);
-          const scoringCtx: ScoringContext = {
-            userLocation: context?.location,
-            getItemPrice: itemPrices
-              ? (_storeId, itemNo) => itemPrices[itemNo] ?? null
-              : undefined,
-          };
-          const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
-          recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
-          if (!context?.location) {
-            warnings.push("No user location provided — distance scoring and radius filtering were not applied.");
+    // ── Stock and Policy paths — run concurrently when both are needed ──
+    const stockTask = needsStock(intent)
+      ? async () => {
+          const cart = context?.cart ?? cartFromIntent(intent);
+          if (cart.length === 0) {
+            warnings.push("No item numbers detected in the query. Please specify the item numbers you are looking for.");
+            return;
           }
-          if (!itemPrices) {
-            warnings.push("Price data not available — price scoring was not applied.");
+          try {
+            const storeStocks = await fetchStoreStocks(adapter, cart, countryCode, intent, config, toolCalls, context);
+            const itemPrices = await fetchItemPrices(adapter, cart, countryCode, toolCalls);
+            const scoringCtx: ScoringContext = {
+              userLocation: context?.location,
+              getItemPrice: itemPrices
+                ? (_storeId, itemNo) => itemPrices[itemNo] ?? null
+                : undefined,
+            };
+            const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
+            recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
+            if (!context?.location) {
+              warnings.push("No user location provided — distance scoring and radius filtering were not applied.");
+            }
+            if (!itemPrices) {
+              warnings.push("Price data not available — price scoring was not applied.");
+            }
+            const allStockUnknown = storeStocks.every((ss) =>
+              ss.items.every((item) => item.stockLevel === "UNKNOWN"),
+            );
+            if (allStockUnknown) {
+              warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
+            }
+            warnings.push(...recommendation.warnings);
+          } catch (err) {
+            const msg = err instanceof CopilotError ? err.message : String(err);
+            warnings.push(`Stock lookup failed: ${msg}`);
           }
-          const allStockUnknown = storeStocks.every((ss) =>
-            ss.items.every((item) => item.stockLevel === "UNKNOWN"),
-          );
-          if (allStockUnknown) {
-            warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
-          }
-          warnings.push(...recommendation.warnings);
-        } catch (err) {
-          const msg = err instanceof CopilotError ? err.message : String(err);
-          warnings.push(`Stock lookup failed: ${msg}`);
         }
-      }
-    }
+      : null;
 
-    // ── Policy / FAQ path ──
-    if (needsPolicy(intent)) {
-      retrievedKnowledge = await fetchPolicy(retriever, query, adapter.retailerId, toolCalls);
-      if (retrievedKnowledge.length === 0) {
-        warnings.push("No relevant policy documents found.");
-      }
-      for (const hit of retrievedKnowledge) {
-        if (hit.source) citations.push({ label: hit.title, url: hit.source });
-      }
-    }
+    const policyTask = needsPolicy(intent)
+      ? async () => {
+          try {
+            retrievedKnowledge = await fetchPolicy(retriever, query, adapter.retailerId, toolCalls);
+            if (retrievedKnowledge.length === 0) {
+              warnings.push("No relevant policy documents found.");
+            }
+            for (const hit of retrievedKnowledge) {
+              if (hit.source) citations.push({ label: hit.title, url: hit.source });
+            }
+          } catch (err) {
+            const msg = err instanceof CopilotError ? err.message : String(err);
+            warnings.push(`Policy lookup failed: ${msg}`);
+          }
+        }
+      : null;
+
+    await Promise.all([stockTask?.(), policyTask?.()])
 
     // ── Product info path ──
     if (intent.type === "product_info" && intent.itemNos.length > 0) {
@@ -218,9 +233,14 @@ export async function handleQuery(
       }
     }
 
-    const answer = config.synthesizer
-      ? await config.synthesizer.synthesize({ query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings })
-      : fallbackAnswer({ query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings });
+    const structuredOnly =
+      config.skipLlmForStructuredResults === true &&
+      (intent.type === "stock" || intent.type === "recommendation") &&
+      retrievedKnowledge.length === 0;
+    const synthInput = { query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings };
+    const answer = config.synthesizer && !structuredOnly
+      ? await config.synthesizer.synthesize(synthInput)
+      : fallbackAnswer(synthInput);
 
     return {
       intent,
@@ -313,23 +333,23 @@ async function fetchItemPrices(
   countryCode: string | undefined,
   toolCalls: ToolCallRecord[],
 ): Promise<Record<string, number> | undefined> {
-  const prices: Record<string, number> = {};
-  for (const item of cart) {
-    try {
-      const products = await timed(
-        () => adapter.searchProducts(item.itemNo, { countryCode, maxResults: 5 }),
-        "search_products_price",
-        adapter.retailerId,
-        toolCalls,
-      );
-      const match = products.find((p) => p.itemNo === item.itemNo);
-      if (match?.price) {
-        prices[item.itemNo] = match.price.amount;
+  const entries = await Promise.all(
+    cart.map(async (item): Promise<[string, number] | null> => {
+      try {
+        const products = await timed(
+          () => adapter.searchProducts(item.itemNo, { countryCode, maxResults: 1 }),
+          "search_products_price",
+          adapter.retailerId,
+          toolCalls,
+        );
+        const match = products.find((p) => p.itemNo === item.itemNo);
+        return match?.price ? [item.itemNo, match.price.amount] : null;
+      } catch {
+        return null; // Individual item price lookup failure is non-fatal
       }
-    } catch {
-      // Individual item price lookup failure is non-fatal
-    }
-  }
+    }),
+  );
+  const prices = Object.fromEntries(entries.filter((e): e is [string, number] => e !== null));
   return Object.keys(prices).length > 0 ? prices : undefined;
 }
 

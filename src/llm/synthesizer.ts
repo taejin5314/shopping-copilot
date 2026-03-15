@@ -35,8 +35,8 @@ export class LlmSynthesizer implements Synthesizer {
     const messages = buildPrompt(input);
     try {
       const response = await this.provider.complete(messages, {
-        maxTokens: 512,
-        temperature: 0.3,
+        maxTokens: 250,
+        temperature: 0,
       });
       return response.content;
     } catch (err) {
@@ -120,16 +120,11 @@ export function fallbackAnswer(input: SynthesisInput): string {
 
 // ── Prompt construction ──
 
-const SYSTEM_PROMPT = `You are a helpful shopping assistant. Your job is to synthesize a clear, concise answer from the structured evidence provided.
-
-Rules:
-- Only state facts present in the provided evidence.
-- Do not invent stock quantities, store names, prices, or policies.
-- If evidence is missing or incomplete, say so briefly.
-- Keep answers practical and under 150 words.
-- Reference specific stores and item numbers when available.
-- Mention policy sources when citing policy information.
-- If warnings exist, incorporate them naturally.`;
+const SYSTEM_PROMPT =
+  "Shopping assistant. Summarize the evidence below in ≤120 words. " +
+  "Facts only — no invented data. Include store names, item numbers, and prices from the evidence. " +
+  "Cite policy sources by name when referencing policy. " +
+  "Incorporate any warnings naturally.";
 
 function buildPrompt(input: SynthesisInput): LlmMessage[] {
   const evidenceParts: string[] = [];
@@ -139,7 +134,8 @@ function buildPrompt(input: SynthesisInput): LlmMessage[] {
 
   if (input.recommendation && input.recommendation.ranked.length > 0) {
     evidenceParts.push("\n## Store Recommendation");
-    for (const store of input.recommendation.ranked) {
+    // Cap at 3 stores — lower-ranked stores rarely appear in the answer.
+    for (const store of input.recommendation.ranked.slice(0, 3)) {
       const fulfilled = store.itemDetails.filter((d) => d.sufficient).length;
       const total = store.itemDetails.length;
       evidenceParts.push(`- ${store.store.label} (score: ${(store.totalScore * 100).toFixed(0)}%): ${fulfilled}/${total} items sufficient`);
@@ -147,10 +143,7 @@ function buildPrompt(input: SynthesisInput): LlmMessage[] {
         evidenceParts.push(`  · ${d.itemNo}: ${d.available ?? 0} in stock, need ${d.requested}${d.sufficient ? " ✓" : " ✗"}`);
       }
     }
-    evidenceParts.push("\nExplanation points:");
-    for (const p of input.recommendation.explanationPoints) {
-      evidenceParts.push(`- ${p}`);
-    }
+    // Explanation points omitted: the ranked scores above carry the same information.
   }
 
   if (input.knowledge.length > 0) {
