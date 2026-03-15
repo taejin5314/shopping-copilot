@@ -11,6 +11,7 @@ import type { LlmProvider } from "../llm/provider.js";
 import { geocode } from "../domain/geocode.js";
 import type { GeocodeOptions } from "../domain/geocode.js";
 import { routeQuery } from "../llm/router.js";
+import { runQueryUnderstanding } from "../llm/query-understanding.js";
 
 // ──────────────────────────────────────────────
 // API entrypoint — single function surface
@@ -71,13 +72,14 @@ export async function ask(
 
   const { query, retailer: retailerKey, countryCode, locationText, location, radiusKm, cart } = parsed.data;
 
-  // Router and geocoding run in parallel to avoid sequential latency.
+  // Router, Query Understanding, and geocoding run in parallel to avoid sequential latency.
   const _tRouter = performance.now();
-  const [routerOutput, geocodeResult] = await Promise.all([
+  const [routerOutput, queryUnderstandingOutput, geocodeResult] = await Promise.all([
     config.llmProvider ? routeQuery(query, config.llmProvider) : Promise.resolve(null),
+    config.llmProvider ? runQueryUnderstanding(query, config.llmProvider) : Promise.resolve(null),
     !location && locationText ? geocode(locationText, config.geocodeOptions) : Promise.resolve(null),
   ]);
-  if (config.llmProvider) perf("router", _tRouter);
+  if (config.llmProvider) perf("router+qu", _tRouter);
 
   // Auto-detect retailer: explicit key → router scope → regex fallback.
   let resolvedRetailerKey = retailerKey;
@@ -112,6 +114,7 @@ export async function ask(
     radiusKm,
     cart,
     routerOutput: routerOutput ?? undefined,
+    queryUnderstandingOutput: queryUnderstandingOutput ?? undefined,
   };
 
   // No explicit retailer → query all registered retailers in parallel.

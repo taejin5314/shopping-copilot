@@ -16,6 +16,7 @@ import { fallbackAnswer } from "../llm/synthesizer.js";
 import type { LlmProvider } from "../llm/provider.js";
 import { extractSearchTerms } from "../llm/keyword-extractor.js";
 import type { RouterOutput } from "../llm/router.js";
+import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
 import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
@@ -57,6 +58,8 @@ export interface QueryContext {
   cart?: CartItem[];
   /** Structured routing decision from the Router Agent. */
   routerOutput?: RouterOutput;
+  /** Normalized query fields from the Query Understanding Agent. */
+  queryUnderstandingOutput?: QueryUnderstandingOutput;
 }
 
 /** Build a descriptive citation label that distinguishes product variants. */
@@ -215,10 +218,13 @@ export async function handleQuery(
       let searchQuery = norm.normalizedQuery;
       console.error(`[orchestrator] retail normalize: "${query}" → "${searchQuery}" (${norm.confidence})`);
 
-      // Step 2: LLM translation — only for low-confidence results (non-ASCII,
-      // no map hit). High/medium confidence means the normalizer already produced
-      // a usable English term; calling the LLM on top would be redundant.
-      if (norm.confidence === "low" && config.llmProvider) {
+      // Step 2: Use Query Understanding keywords if available (pre-computed in parallel
+      // by ask.ts), otherwise fall back to LLM keyword extraction for low-confidence results.
+      const quKeywords = context?.queryUnderstandingOutput?.keywords;
+      if (quKeywords && quKeywords.length > 0) {
+        searchQuery = quKeywords.join(" ");
+        console.error(`[orchestrator] qu keywords: "${query}" → "${searchQuery}"`);
+      } else if (norm.confidence === "low" && config.llmProvider) {
         const _tLlmExtract = performance.now();
         const translated = await extractSearchTerms(query, config.llmProvider);
         perf("llm keyword extraction", _tLlmExtract);

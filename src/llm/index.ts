@@ -6,3 +6,5 @@ export type { Synthesizer, SynthesisInput } from "./synthesizer.js";
 export { extractSearchTerms } from "./keyword-extractor.js";
 export { routeQuery, routeQueryDetailed, RouterOutputSchema } from "./router.js";
 export type { RouterOutput, RouterResult, RouterFailureReason, RouterCallOpts } from "./router.js";
+export { runQueryUnderstanding, runQueryUnderstandingDetailed, QueryUnderstandingOutputSchema } from "./query-understanding.js";
+export type { QueryUnderstandingOutput, QueryUnderstandingResult, QueryUnderstandingFailureReason, QueryUnderstandingCallOpts } from "./query-understanding.js";
