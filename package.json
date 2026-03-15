@@ -11,7 +11,7 @@
     "start:http": "node dist/api/http.js",
     "start": "node dist/api/http.js",
     "dev:http": "tsx src/api/http.ts",
-    "test": "node --import tsx/esm --test test/intent.test.ts test/scoring.test.ts test/retriever.test.ts test/synthesizer.test.ts test/structube-adapter.test.ts test/distance.test.ts test/price.test.ts test/geocode.test.ts test/keyword-extractor.test.ts test/retail-query-normalizer.test.ts test/router.test.ts test/query-understanding.test.ts test/product-finder.test.ts",
+    "test": "node --import tsx/esm --test test/intent.test.ts test/scoring.test.ts test/retriever.test.ts test/synthesizer.test.ts test/structube-adapter.test.ts test/distance.test.ts test/price.test.ts test/geocode.test.ts test/keyword-extractor.test.ts test/retail-query-normalizer.test.ts test/router.test.ts test/query-understanding.test.ts test/product-finder.test.ts test/e2e-eval.test.ts",
     "test:api": "node --import tsx/esm --test test/api.test.ts",
     "test:integration": "node --import tsx/esm --test test/integration.test.ts",
     "test:all": "node --import tsx/esm --test test/**/*.test.ts",

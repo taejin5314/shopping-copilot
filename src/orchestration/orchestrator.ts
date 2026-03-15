@@ -19,6 +19,7 @@ import type { RouterOutput } from "../llm/router.js";
 import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
 import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
 import { findProducts, candidateToProductInfo } from "../domain/product-finder.js";
+import type { ProductCandidate } from "../domain/product-finder.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
@@ -220,6 +221,10 @@ export async function handleQuery(
       const quOutput = context?.queryUnderstandingOutput;
       const _tUnknown = performance.now();
 
+      // finderCandidates is set by Route A; used by the auto-rank block to scope
+      // inventory lookup to variants of a single product (prevents mixing sofa with desk).
+      let finderCandidates: ProductCandidate[] | null = null;
+
       if (quOutput) {
         // ── Route A: Product Finder ──
         try {
@@ -233,6 +238,7 @@ export async function handleQuery(
           );
           warnings.push(...finderResult.warnings);
           if (finderResult.candidates.length > 0) {
+            finderCandidates = finderResult.candidates;
             foundProducts = finderResult.candidates.map(candidateToProductInfo);
           } else {
             warnings.push("Could not find products matching your query. Try asking about stock availability, store comparison, or return policies.");
@@ -294,10 +300,14 @@ export async function handleQuery(
         for (const p of foundProducts) {
           if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
         }
-        // Auto-rank stores by best-availability variant. Search results are often color/size
-        // variants — requiring all simultaneously would produce false "no stock" results.
+        // Auto-rank stores by best-availability variant. Restrict to variants of the
+        // single highest-scored product (topVariantGroup) so a sofa and a desk aren't
+        // treated as a cart. Fall back to foundProducts when Product Finder wasn't used.
         try {
-          const variantCart: CartItem[] = foundProducts.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
+          const variantSource = finderCandidates
+            ? topVariantGroup(finderCandidates).map(candidateToProductInfo)
+            : foundProducts;
+          const variantCart: CartItem[] = variantSource.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
           const storeStocks = await fetchStoreStocks(adapter, variantCart, countryCode, intent, config, toolCalls, context);
 
           // Pick the variant SKU with the most stores having it available.
@@ -455,6 +465,22 @@ async function fetchItemPrices(
   );
   const prices = Object.fromEntries(entries.filter((e): e is [string, number] => e !== null));
   return Object.keys(prices).length > 0 ? prices : undefined;
+}
+
+/**
+ * Return variants of the single highest-scored product from a sorted candidate list.
+ * Groups by retailer + product name so color/size variants of the same item are kept
+ * together, while unrelated products (e.g. sofa vs desk) are excluded.
+ * Falls back to the top candidate alone when no same-name siblings exist.
+ */
+function topVariantGroup(candidates: ProductCandidate[]): ProductCandidate[] {
+  if (candidates.length === 0) return [];
+  const top = candidates[0];
+  const groupKey = `${top.retailer}:${top.name.toLowerCase().trim()}`;
+  const group = candidates.filter(
+    (c) => `${c.retailer}:${c.name.toLowerCase().trim()}` === groupKey,
+  );
+  return group.length > 0 ? group : [top];
 }
 
 async function timed<T>(

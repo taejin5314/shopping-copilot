@@ -79,6 +79,12 @@ export interface ProductFinderResult {
   warnings: string[];
 }
 
+// ── Structured logging ──
+
+function pfLog(fields: Record<string, unknown>): void {
+  console.error("[product-finder]", JSON.stringify(fields));
+}
+
 // ── Scoring constants ──
 
 const BASE_SCORE = 0.8;
@@ -104,7 +110,6 @@ export async function findProducts(
   const countryCode = opts?.countryCode;
 
   const searchQuery = buildSearchQuery(rawQuery, quOutput);
-  const keywords = quOutput?.keywords ?? [];
   const warnings: string[] = [];
 
   // Scope adapters to the requested retailer if a specific one was named.
@@ -113,6 +118,15 @@ export async function findProducts(
     warnings.push(`No adapters available for retailerScope "${retailerScope ?? "all"}". Falling back to all adapters.`);
   }
   const targetAdapters = scopedAdapters.length > 0 ? scopedAdapters : adapters;
+
+  pfLog({
+    event: "search_started",
+    searchQuery,
+    adapterCount: targetAdapters.length,
+    retailerScope: retailerScope ?? "all",
+    itemCardinality: quOutput?.itemCardinality ?? null,
+    routerIntent: routerOutput?.intent ?? null,
+  });
 
   // Multi-item warning — results may span multiple product types.
   if (quOutput?.itemCardinality === "multiple") {
@@ -141,13 +155,15 @@ export async function findProducts(
 
   // Normalize and score all results.
   const raw: ProductCandidate[] = perAdapterResults.flatMap(({ retailer, products }) =>
-    products.map((p) => normalizeFromProductInfo(p, retailer, keywords, quOutput)),
+    products.map((p) => normalizeFromProductInfo(p, retailer, quOutput)),
   );
+  const rawCount = raw.length;
 
   // Deduplicate identical retailer+itemNo (keeps highest-scored copy).
   const candidates = deduplicateByItemNo(raw);
+  const dedupRemoved = rawCount - candidates.length;
 
-  // Sort by score descending, cap at maxResults per adapter aggregated.
+  // Sort by score descending.
   candidates.sort((a, b) => b.matchScore - a.matchScore);
 
   // Warn when the overall result set is weak.
@@ -157,6 +173,22 @@ export async function findProducts(
       "The query may be too vague or no products closely match the specified attributes.",
     );
   }
+
+  const scoreHigh = candidates.filter((c) => c.matchScore >= 0.8).length;
+  const scoreMid = candidates.filter((c) => c.matchScore >= 0.5 && c.matchScore < 0.8).length;
+  const scoreLow = candidates.filter((c) => c.matchScore < 0.5).length;
+
+  pfLog({
+    event: "search_done",
+    searchQuery,
+    rawCount,
+    candidateCount: candidates.length,
+    dedupRemoved,
+    scoreHigh,
+    scoreMid,
+    scoreLow,
+    warningCount: warnings.length,
+  });
 
   return { candidates: candidates.slice(0, maxResults * targetAdapters.length), searchQuery, warnings };
 }
@@ -220,7 +252,6 @@ function scopeAdapters(adapters: RetailerAdapter[], retailerScope: string | unde
 function normalizeFromProductInfo(
   product: ProductInfo,
   retailer: string,
-  keywords: string[],
   quOutput: QueryUnderstandingOutput | undefined,
 ): ProductCandidate {
   const candidateWarnings: string[] = [];

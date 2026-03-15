@@ -428,6 +428,155 @@ describe("findProducts", () => {
   });
 });
 
+// ── Additional edge cases ──
+
+describe("findProducts — over-budget, missing attributes, variant grouping", () => {
+  it("over-budget candidate is still returned (not filtered), with warning and reduced score", async () => {
+    const products = [
+      makeProduct({ itemNo: "E01.001.01", name: "PÄRUP Sofa bed", price: { amount: 950, currency: "CAD" } }),
+    ];
+    const result = await findProducts(
+      { rawQuery: "sofa bed", quOutput: QU_SOFA_BED }, // budgetMax: 800
+      [fakeAdapter("ikea", products)],
+    );
+    // Not filtered — candidate still present
+    assert.equal(result.candidates.length, 1);
+    const c = result.candidates[0];
+    // Warning present
+    assert.ok(c.warnings.some((w) => w.toLowerCase().includes("budget")));
+    // Score penalised but still positive — product is relevant, just over budget
+    assert.ok(c.matchScore < 0.8);
+    assert.ok(c.matchScore > 0);
+  });
+
+  it("significantly over-budget (>1.5×) candidate has steeper penalty and warning", async () => {
+    const within = makeProduct({ itemNo: "E02.001.01", name: "Basic Sofa bed", price: { amount: 750, currency: "CAD" } });
+    const wayOver = makeProduct({ itemNo: "E02.001.02", name: "Luxury Sofa bed", price: { amount: 1400, currency: "CAD" } });
+    const result = await findProducts(
+      { rawQuery: "sofa bed", quOutput: QU_SOFA_BED }, // budgetMax: 800
+      [fakeAdapter("ikea", [within, wayOver])],
+    );
+    const withinCandidate = result.candidates.find((c) => c.itemNo === "E02.001.01")!;
+    const wayOverCandidate = result.candidates.find((c) => c.itemNo === "E02.001.02")!;
+    assert.ok(withinCandidate.matchScore > wayOverCandidate.matchScore);
+    assert.ok(wayOverCandidate.warnings.some((w) => w.toLowerCase().includes("significantly")));
+  });
+
+  it("missing material attribute adds warning but does not remove candidate", async () => {
+    const products = [
+      makeProduct({ itemNo: "E03.001.01", name: "EKTORP Sofa fabric", designText: "Beige" }),
+    ];
+    // QU requests leather — product has fabric
+    const result = await findProducts(
+      { rawQuery: "leather sofa", quOutput: QU_LEATHER_SOFA },
+      [fakeAdapter("ikea", products)],
+    );
+    assert.equal(result.candidates.length, 1); // not removed
+    const c = result.candidates[0];
+    assert.ok(c.warnings.some((w) => w.toLowerCase().includes("material")));
+    assert.ok(c.matchScore < 0.8); // penalised
+    assert.ok(c.matchScore > 0);   // still positive
+  });
+
+  it("missing color attribute adds warning but does not remove candidate", async () => {
+    const products = [
+      makeProduct({ itemNo: "E04.001.01", name: "ALEX Desk oak", designText: "oak" }),
+    ];
+    // QU requests white
+    const result = await findProducts(
+      { rawQuery: "white desk", quOutput: QU_IKEA_DESK },
+      [fakeAdapter("ikea", products)],
+    );
+    assert.equal(result.candidates.length, 1);
+    const c = result.candidates[0];
+    assert.ok(c.warnings.some((w) => w.toLowerCase().includes("color")));
+    assert.ok(c.matchScore > 0);
+  });
+
+  it("four attribute misses cumulatively push score to zero (clamped)", async () => {
+    const quAllAttrs: QueryUnderstandingOutput = {
+      ...QU_SOFA_BED,
+      color: "crimson",
+      material: "bamboo",
+      size: "giant",
+      style: "baroque",
+      budgetMax: 50, // way under price → big penalty
+    };
+    const products = [makeProduct({ itemNo: "E05.001.01", name: "Plain Chair", price: { amount: 500, currency: "CAD" } })];
+    const result = await findProducts(
+      { rawQuery: "chair", quOutput: quAllAttrs },
+      [fakeAdapter("ikea", products)],
+    );
+    const c = result.candidates[0];
+    assert.equal(c.matchScore, 0); // clamped at 0
+    assert.ok(c.warnings.some((w) => w.toLowerCase().includes("weak")));
+  });
+
+  it("three color variants of same product are preserved as separate candidates", async () => {
+    const products = [
+      makeProduct({ itemNo: "E06.001.01", name: "SÖDERHAMN Sofa", designText: "Beige" }),
+      makeProduct({ itemNo: "E06.001.02", name: "SÖDERHAMN Sofa", designText: "Dark blue" }),
+      makeProduct({ itemNo: "E06.001.03", name: "SÖDERHAMN Sofa", designText: "Light grey" }),
+    ];
+    const result = await findProducts(
+      { rawQuery: "sofa", quOutput: QU_SOFA_BED },
+      [fakeAdapter("ikea", products)],
+    );
+    assert.equal(result.candidates.length, 3);
+    const variantIds = result.candidates.map((c) => c.variantId);
+    assert.ok(variantIds.includes("Beige"));
+    assert.ok(variantIds.includes("Dark blue"));
+    assert.ok(variantIds.includes("Light grey"));
+    // Each has a unique itemNo
+    const itemNos = new Set(result.candidates.map((c) => c.itemNo));
+    assert.equal(itemNos.size, 3);
+  });
+
+  it("same-name variant with matching color scores higher than same-name variant without", async () => {
+    // QU_IKEA_DESK requests color=white
+    const products = [
+      makeProduct({ itemNo: "E07.001.01", name: "MICKE Desk", designText: "white" }),
+      makeProduct({ itemNo: "E07.001.02", name: "MICKE Desk", designText: "black" }),
+      makeProduct({ itemNo: "E07.001.03", name: "MICKE Desk", designText: "red" }),
+    ];
+    const result = await findProducts(
+      { rawQuery: "white desk", quOutput: QU_IKEA_DESK },
+      [fakeAdapter("ikea", products)],
+    );
+    assert.equal(result.candidates.length, 3); // all kept
+    // White variant is top-scored
+    assert.equal(result.candidates[0].designText, "white");
+    // Non-white variants have color mismatch warnings
+    for (const c of result.candidates.filter((c) => c.designText !== "white")) {
+      assert.ok(c.warnings.some((w) => w.toLowerCase().includes("color")));
+    }
+  });
+
+  it("duplicate itemNo from two adapters with same retailerId deduplicates to one", async () => {
+    // Two adapters both claiming to be "ikea" returning the same product
+    const p = makeProduct({ itemNo: "E08.001.01", name: "KALLAX Shelf" });
+    const result = await findProducts(
+      { rawQuery: "shelf", quOutput: QU_SOFA_BED },
+      [fakeAdapter("ikea", [p]), fakeAdapter("ikea", [p])],
+    );
+    assert.equal(result.candidates.filter((c) => c.itemNo === "E08.001.01").length, 1);
+  });
+
+  it("product with no price is not penalised for budget even when budgetMax is set", async () => {
+    const products = [
+      makeProduct({ itemNo: "E09.001.01", name: "FRIHETEN Sofa bed", price: null }),
+    ];
+    const result = await findProducts(
+      { rawQuery: "sofa bed", quOutput: QU_SOFA_BED }, // budgetMax: 800
+      [fakeAdapter("ikea", products)],
+    );
+    const c = result.candidates[0];
+    // No budget warning — can't penalise unknown price
+    assert.ok(!c.warnings.some((w) => w.toLowerCase().includes("budget")));
+    assert.equal(c.matchScore, 0.8); // BASE_SCORE, no adjustment
+  });
+});
+
 // ── candidateToProductInfo ──
 
 describe("candidateToProductInfo", () => {
