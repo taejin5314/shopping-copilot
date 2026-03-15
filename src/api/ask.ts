@@ -10,6 +10,7 @@ import { fallbackAnswer } from "../llm/synthesizer.js";
 import type { LlmProvider } from "../llm/provider.js";
 import { geocode } from "../domain/geocode.js";
 import type { GeocodeOptions } from "../domain/geocode.js";
+import { routeQuery } from "../llm/router.js";
 
 // ──────────────────────────────────────────────
 // API entrypoint — single function surface
@@ -69,25 +70,49 @@ export async function ask(
   }
 
   const { query, retailer: retailerKey, countryCode, locationText, location, radiusKm, cart } = parsed.data;
-  // Auto-detect retailer from query text when not explicitly specified.
-  const resolvedRetailerKey = retailerKey ??
-    Object.keys(config.retailers ?? {}).find((id) => new RegExp(`\\b${id}\\b`, "i").test(query));
 
-  // Resolve location: explicit coords take priority, then geocode locationText.
+  // Router and geocoding run in parallel to avoid sequential latency.
+  const _tRouter = performance.now();
+  const [routerOutput, geocodeResult] = await Promise.all([
+    config.llmProvider ? routeQuery(query, config.llmProvider) : Promise.resolve(null),
+    !location && locationText ? geocode(locationText, config.geocodeOptions) : Promise.resolve(null),
+  ]);
+  if (config.llmProvider) perf("router", _tRouter);
+
+  // Auto-detect retailer: explicit key → router scope → regex fallback.
+  let resolvedRetailerKey = retailerKey;
+  if (!resolvedRetailerKey && routerOutput) {
+    const scope = routerOutput.retailerScope;
+    if (scope !== "all" && scope !== "unknown") {
+      const knownIds = [config.adapter.retailerId, ...Object.keys(config.retailers ?? {})];
+      if (knownIds.includes(scope)) resolvedRetailerKey = scope;
+    }
+  }
+  if (!resolvedRetailerKey) {
+    resolvedRetailerKey = Object.keys(config.retailers ?? {}).find(
+      (id) => new RegExp(`\\b${id}\\b`, "i").test(query),
+    );
+  }
+
+  // Resolve location from geocoding result.
   let resolvedLocation = location;
   const warnings: string[] = [];
   if (!resolvedLocation && locationText) {
-    const _tGeo = performance.now();
-    const result = await geocode(locationText, config.geocodeOptions);
-    perf("geocode", _tGeo);
-    if (result) {
-      resolvedLocation = result.coords;
+    if (geocodeResult) {
+      resolvedLocation = geocodeResult.coords;
     } else {
       warnings.push(`Could not resolve location "${locationText}". Distance scoring disabled.`);
     }
   }
 
-  const context: QueryContext = { retailer: retailerKey, countryCode, location: resolvedLocation, radiusKm, cart };
+  const context: QueryContext = {
+    retailer: retailerKey,
+    countryCode,
+    location: resolvedLocation,
+    radiusKm,
+    cart,
+    routerOutput: routerOutput ?? undefined,
+  };
 
   // No explicit retailer → query all registered retailers in parallel.
   const allEntries: RetailerEntry[] = [

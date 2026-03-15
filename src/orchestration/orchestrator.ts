@@ -15,6 +15,7 @@ import type { Synthesizer } from "../llm/synthesizer.js";
 import { fallbackAnswer } from "../llm/synthesizer.js";
 import type { LlmProvider } from "../llm/provider.js";
 import { extractSearchTerms } from "../llm/keyword-extractor.js";
+import type { RouterOutput } from "../llm/router.js";
 import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
@@ -54,6 +55,8 @@ export interface QueryContext {
   radiusKm?: number;
   /** Pre-parsed cart items (skip extraction from query). */
   cart?: CartItem[];
+  /** Structured routing decision from the Router Agent. */
+  routerOutput?: RouterOutput;
 }
 
 /** Build a descriptive citation label that distinguishes product variants. */
@@ -89,6 +92,21 @@ export async function handleQuery(
     console.error(`[orchestrator] Cart override: unknown → stock (cart has ${context!.cart!.length} items)`);
     intent.type = "stock";
   }
+
+  // Apply router output: upgrade intent when the pattern-based classifier returned "unknown"
+  // and the router has high confidence.  "find_best_store" and "check_cart" both map to
+  // the stock pipeline; "search_product" is already handled by the existing classifier.
+  const ro = context?.routerOutput;
+  if (ro && intent.type === "unknown") {
+    if (ro.intent === "find_best_store" || ro.intent === "check_cart") {
+      console.error(`[orchestrator] Router override: unknown → stock (router intent=${ro.intent}, confidence=${ro.confidence})`);
+      intent.type = "stock";
+    } else if (ro.intent === "search_product") {
+      console.error(`[orchestrator] Router override: unknown → product_info (router intent=${ro.intent})`);
+      intent.type = "product_info";
+    }
+  }
+  if (ro?.warnings.length) warnings.push(...ro.warnings);
   let recommendation: RecommendationResult | null = null;
   let retrievedKnowledge: PolicyHit[] = [];
   let foundProducts: ProductInfo[] = [];
