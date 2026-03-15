@@ -18,6 +18,7 @@ import { extractSearchTerms } from "../llm/keyword-extractor.js";
 import type { RouterOutput } from "../llm/router.js";
 import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
 import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
+import { findProducts, candidateToProductInfo } from "../domain/product-finder.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
@@ -210,100 +211,126 @@ export async function handleQuery(
       }
     }
 
-    // ── Unknown intent — product search fallback ──
+    // ── Unknown intent — product search ──
+    // Route A (Router → QU → Product Finder): when Query Understanding output is available,
+    //   delegate to findProducts for scored, attribute-filtered candidates.
+    // Route B (existing path): normalizeForRetail → optional LLM extraction → searchProducts.
+    // Both routes converge on foundProducts; citations and auto-rank run once below.
     if (intent.type === "unknown") {
-      // Step 1: domain-aware pre-normalization (no LLM, handles known ambiguities
-      // across languages: "watch"→wall clock, "시계"→wall clock, "tapis"→rug, …)
-      const norm = normalizeForRetail(query);
-      let searchQuery = norm.normalizedQuery;
-      console.error(`[orchestrator] retail normalize: "${query}" → "${searchQuery}" (${norm.confidence})`);
+      const quOutput = context?.queryUnderstandingOutput;
+      const _tUnknown = performance.now();
 
-      // Step 2: Use Query Understanding keywords if available (pre-computed in parallel
-      // by ask.ts), otherwise fall back to LLM keyword extraction for low-confidence results.
-      const quKeywords = context?.queryUnderstandingOutput?.keywords;
-      if (quKeywords && quKeywords.length > 0) {
-        searchQuery = quKeywords.join(" ");
-        console.error(`[orchestrator] qu keywords: "${query}" → "${searchQuery}"`);
-      } else if (norm.confidence === "low" && config.llmProvider) {
-        const _tLlmExtract = performance.now();
-        const translated = await extractSearchTerms(query, config.llmProvider);
-        perf("llm keyword extraction", _tLlmExtract);
-        console.error(`[orchestrator] llm extraction: "${query}" → "${translated}"`);
-        if (translated) {
-          searchQuery = translated;
-        } else {
-          warnings.push("Search term could not be translated to English. Try searching in English for best results.");
+      if (quOutput) {
+        // ── Route A: Product Finder ──
+        try {
+          const finderResult = await findProducts(
+            { rawQuery: query, routerOutput: ro, quOutput, retailerScope: ro?.retailerScope },
+            [adapter],
+            { maxResults: config.maxProductResults ?? 3, countryCode },
+          );
+          console.error(
+            `[orchestrator] product-finder: "${finderResult.searchQuery}" → ${finderResult.candidates.length} candidates`,
+          );
+          warnings.push(...finderResult.warnings);
+          if (finderResult.candidates.length > 0) {
+            foundProducts = finderResult.candidates.map(candidateToProductInfo);
+          } else {
+            warnings.push("Could not find products matching your query. Try asking about stock availability, store comparison, or return policies.");
+          }
+        } catch (err) {
+          console.error("[orchestrator] product finder failed:", err);
+          warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
         }
-      } else if (norm.confidence === "low") {
-        // Non-ASCII, no map hit, no LLM available
-        warnings.push("Search term appears to be non-English. Try searching in English for best results.");
+      } else {
+        // ── Route B: Existing path ──
+        // Step 1: domain-aware pre-normalization
+        const norm = normalizeForRetail(query);
+        let searchQuery = norm.normalizedQuery;
+        console.error(`[orchestrator] retail normalize: "${query}" → "${searchQuery}" (${norm.confidence})`);
+
+        // Step 2: LLM translation for low-confidence (non-English) queries
+        if (norm.confidence === "low" && config.llmProvider) {
+          const _tLlmExtract = performance.now();
+          const translated = await extractSearchTerms(query, config.llmProvider);
+          perf("llm keyword extraction", _tLlmExtract);
+          console.error(`[orchestrator] llm extraction: "${query}" → "${translated}"`);
+          if (translated) {
+            searchQuery = translated;
+          } else {
+            warnings.push("Search term could not be translated to English. Try searching in English for best results.");
+          }
+        } else if (norm.confidence === "low") {
+          warnings.push("Search term appears to be non-English. Try searching in English for best results.");
+        }
+
+        try {
+          console.error(`[orchestrator] product search fallback query: "${searchQuery}"`);
+          const products = await timed(
+            () => adapter.searchProducts(searchQuery, { countryCode, maxResults: config.maxProductResults ?? 3 }),
+            "search_products",
+            adapter.retailerId,
+            toolCalls,
+          );
+          console.error(`[orchestrator] product search returned ${products.length} results`);
+          if (products.length > 0) {
+            foundProducts = products;
+          } else {
+            const nonEnglishHint = norm.confidence === "low" && searchQuery === norm.normalizedQuery
+              ? " Your query appears to be non-English — try searching in English."
+              : "";
+            warnings.push(`Could not find products matching your query.${nonEnglishHint} Try asking about stock availability, store comparison, or return policies.`);
+          }
+        } catch (err) {
+          console.error("[orchestrator] product search fallback failed:", err);
+          warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+        }
       }
 
-      try {
-        console.error(`[orchestrator] product search fallback query: "${searchQuery}"`);
-        const _tUnknown = performance.now();
-        const products = await timed(
-          () => adapter.searchProducts(searchQuery, { countryCode, maxResults: config.maxProductResults ?? 3 }),
-          "search_products",
-          adapter.retailerId,
-          toolCalls,
-        );
-        console.error(`[orchestrator] product search returned ${products.length} results`);
-        if (products.length > 0) {
-          intent.type = "product_info";
-          foundProducts = products;
-          for (const p of products) {
-            if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
-          }
-          // Auto-rank stores for the found products so the user gets a recommendation,
-          // not just a flat product list. Fetch all variants in one call, then rank by
-          // the single variant with the best availability — search results are often
-          // color/size variants and requiring all simultaneously produces false "no stock".
-          try {
-            const variantCart: CartItem[] = products.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
-            const storeStocks = await fetchStoreStocks(adapter, variantCart, countryCode, intent, config, toolCalls, context);
+      perf("product search", _tUnknown);
 
-            // Pick the variant SKU with the most stores having it available.
-            const skuAvailCount = new Map<string, number>();
-            for (const ss of storeStocks) {
-              for (const item of ss.items) {
-                if (item.available) skuAvailCount.set(item.itemNo, (skuAvailCount.get(item.itemNo) ?? 0) + 1);
-              }
-            }
-            let bestSku = variantCart[0].itemNo;
-            let bestCount = 0;
-            for (const [sku, count] of skuAvailCount) {
-              if (count > bestCount) { bestCount = count; bestSku = sku; }
-            }
-            const topCart: CartItem[] = [{ itemNo: bestSku, quantity: 1 }];
-            const filteredStocks = storeStocks.map((ss) => ({
-              store: ss.store,
-              items: ss.items.filter((i) => i.itemNo === bestSku),
-            }));
-            const scoringCtx: ScoringContext = { userLocation: context?.location };
-            const ranked = rankStores(filteredStocks, topCart, undefined, scoringCtx);
-            recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
-            const allStockUnknown = storeStocks.every((ss) =>
-              ss.items.every((item) => item.stockLevel === "UNKNOWN"),
-            );
-            if (allStockUnknown) {
-              warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
-            }
-            warnings.push(...recommendation.warnings);
-          } catch (rankErr) {
-            console.error("[orchestrator] store ranking after product search failed:", rankErr);
-            // Non-fatal: products are still returned even if store ranking fails
-          }
-        } else {
-          const nonEnglishHint = norm.confidence === "low" && searchQuery === norm.normalizedQuery
-            ? " Your query appears to be non-English — try searching in English."
-            : "";
-          warnings.push(`Could not find products matching your query.${nonEnglishHint} Try asking about stock availability, store comparison, or return policies.`);
+      // ── Shared: if products found, set intent, build citations, auto-rank stores ──
+      if (foundProducts.length > 0) {
+        intent.type = "product_info";
+        for (const p of foundProducts) {
+          if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
         }
-        perf("product search + auto-rank", _tUnknown);
-      } catch (err) {
-        console.error("[orchestrator] product search fallback failed:", err);
-        warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
+        // Auto-rank stores by best-availability variant. Search results are often color/size
+        // variants — requiring all simultaneously would produce false "no stock" results.
+        try {
+          const variantCart: CartItem[] = foundProducts.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
+          const storeStocks = await fetchStoreStocks(adapter, variantCart, countryCode, intent, config, toolCalls, context);
+
+          // Pick the variant SKU with the most stores having it available.
+          const skuAvailCount = new Map<string, number>();
+          for (const ss of storeStocks) {
+            for (const item of ss.items) {
+              if (item.available) skuAvailCount.set(item.itemNo, (skuAvailCount.get(item.itemNo) ?? 0) + 1);
+            }
+          }
+          let bestSku = variantCart[0].itemNo;
+          let bestCount = 0;
+          for (const [sku, count] of skuAvailCount) {
+            if (count > bestCount) { bestCount = count; bestSku = sku; }
+          }
+          const topCart: CartItem[] = [{ itemNo: bestSku, quantity: 1 }];
+          const filteredStocks = storeStocks.map((ss) => ({
+            store: ss.store,
+            items: ss.items.filter((i) => i.itemNo === bestSku),
+          }));
+          const scoringCtx: ScoringContext = { userLocation: context?.location };
+          const ranked = rankStores(filteredStocks, topCart, undefined, scoringCtx);
+          recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
+          const allStockUnknown = storeStocks.every((ss) =>
+            ss.items.every((item) => item.stockLevel === "UNKNOWN"),
+          );
+          if (allStockUnknown) {
+            warnings.push("Real-time stock levels unavailable for this retailer — rankings reflect location and convenience only.");
+          }
+          warnings.push(...recommendation.warnings);
+        } catch (rankErr) {
+          console.error("[orchestrator] store ranking after product search failed:", rankErr);
+          // Non-fatal: products are still returned even if store ranking fails
+        }
       }
     }
 
