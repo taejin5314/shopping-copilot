@@ -792,3 +792,77 @@ describe("parseLogLine + importRecord integration", () => {
     assert.equal(input!.routerOutput, undefined);
   });
 });
+
+// ── rankingSnapshot passthrough ──
+
+describe("importRecord — rankingSnapshot", () => {
+  const snap = {
+    stores: [
+      {
+        store: { retailer: "test", storeId: "A", label: "Store A" },
+        items: [{ itemNo: "001", available: true, quantity: 5, stockLevel: null, canNotify: null }],
+      },
+    ],
+    cart: [{ itemNo: "001", quantity: 1 }],
+    rankedIds: ["A"],
+  };
+
+  it("passes through a valid rankingSnapshot", () => {
+    const { input } = importRecord({ query: "shelf", rankingSnapshot: snap });
+    assert.ok(input !== null);
+    assert.deepEqual(input!.rankingSnapshot?.rankedIds, ["A"]);
+    assert.equal(input!.rankingSnapshot?.cart[0].itemNo, "001");
+    assert.equal(input!.rankingSnapshot?.stores.length, 1);
+  });
+
+  it("rankingSnapshot is absent when not in raw record", () => {
+    const { input } = importRecord({ query: "shelf" });
+    assert.ok(input !== null);
+    assert.equal(input!.rankingSnapshot, undefined);
+  });
+
+  it("rankingSnapshot is absent when null in raw record", () => {
+    const { input } = importRecord({ query: "shelf", rankingSnapshot: null });
+    assert.ok(input !== null);
+    assert.equal(input!.rankingSnapshot, undefined);
+  });
+
+  it("rankingSnapshot is absent when rankedIds contains non-strings", () => {
+    const bad = { ...snap, rankedIds: [1, 2] };
+    const { input } = importRecord({ query: "shelf", rankingSnapshot: bad });
+    assert.ok(input !== null);
+    assert.equal(input!.rankingSnapshot, undefined);
+  });
+
+  it("rankingSnapshot is absent when stores is missing", () => {
+    const { stores: _omit, ...noStores } = snap;
+    const { input } = importRecord({ query: "shelf", rankingSnapshot: noStores });
+    assert.ok(input !== null);
+    assert.equal(input!.rankingSnapshot, undefined);
+  });
+
+  it("importRecord does not set isPartial for absent rankingSnapshot", () => {
+    const { isPartial } = importRecord({ query: "shelf" });
+    assert.equal(isPartial, false);
+  });
+
+  it("groupAndImport preserves rankingSnapshot from the merged group", () => {
+    const records: RawCapturedRecord[] = [
+      { requestId: "r1", query: "desk" },
+      { requestId: "r1", rankingSnapshot: snap },
+    ];
+    const { records: imported } = groupAndImport(records);
+    assert.equal(imported.length, 1);
+    assert.deepEqual(imported[0].rankingSnapshot?.rankedIds, ["A"]);
+  });
+
+  it("extractScenariosFromCaptures produces a scenario from an imported record", async () => {
+    // Import via log-importer, then extract via golden-ranking-fixtures helper.
+    const { extractScenariosFromCaptures } = await import("./golden-ranking-fixtures.js");
+    const { records } = importRecords([{ query: "shelf", rankingSnapshot: snap }]);
+    const scenarios = extractScenariosFromCaptures(records as Parameters<typeof extractScenariosFromCaptures>[0]);
+    assert.equal(scenarios.length, 1);
+    assert.deepEqual(scenarios[0].expectedOrder, ["A"]);
+    assert.equal(scenarios[0].cart[0].itemNo, "001");
+  });
+});

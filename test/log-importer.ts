@@ -27,6 +27,7 @@
 import type { RouterOutput } from "../src/llm/router.js";
 import type { QueryUnderstandingOutput } from "../src/llm/query-understanding.js";
 import type { ExplanationOutput } from "../src/core/types.js";
+import type { RankingSnapshot } from "../src/capture/capture-record.js";
 import type { PipelineReviewInput } from "./quality-review.js";
 
 // ── Flexible input type ──
@@ -247,6 +248,24 @@ function validateExplanationOutput(
 }
 
 /**
+ * Validate a raw rankingSnapshot value.
+ * Returns the snapshot when it has the minimum required shape:
+ *   stores: array, cart: array, rankedIds: string[].
+ * Returns undefined (not null) when absent or invalid — rankingSnapshot is
+ * always optional so we never signal "ran but failed" for it.
+ */
+function validateRankingSnapshot(v: unknown): RankingSnapshot | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "object" || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  if (!Array.isArray(o.stores)) return undefined;
+  if (!Array.isArray(o.cart)) return undefined;
+  if (!Array.isArray(o.rankedIds)) return undefined;
+  if (!o.rankedIds.every((id: unknown) => typeof id === "string")) return undefined;
+  return v as RankingSnapshot;
+}
+
+/**
  * Derive inputSource from a raw value.
  * Returns undefined when the value cannot be safely interpreted.
  */
@@ -443,6 +462,9 @@ export function importRecord(raw: RawCapturedRecord): SingleImportResult {
   if (isCartIntent !== undefined) input.isCartIntent = isCartIntent;
   if (rawWarnings.length > 0) input.warnings = rawWarnings;
   if (finalAnswerSummary !== undefined) input.finalAnswerSummary = finalAnswerSummary;
+
+  const rankingSnapshot = validateRankingSnapshot(raw.rankingSnapshot);
+  if (rankingSnapshot !== undefined) input.rankingSnapshot = rankingSnapshot;
 
   return { input, importWarnings, isPartial };
 }

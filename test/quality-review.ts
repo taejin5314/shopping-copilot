@@ -21,6 +21,7 @@
 import type { RouterOutput } from "../src/llm/router.js";
 import type { QueryUnderstandingOutput } from "../src/llm/query-understanding.js";
 import type { ExplanationOutput } from "../src/domain/explanation.js";
+import type { RankingSnapshot } from "../src/capture/capture-record.js";
 
 // ── Input model ──
 
@@ -64,6 +65,12 @@ export interface PipelineReviewInput {
   warnings?: string[];
   /** Optional short summary of the final synthesized answer, for display only. */
   finalAnswerSummary?: string;
+  /**
+   * Store-ranking snapshot captured by the orchestrator.
+   * Present only when a ranking path ran and CaptureRecord had rankingSnapshot set.
+   * Used by extractScenariosFromCaptures() to produce offline golden scenarios.
+   */
+  rankingSnapshot?: RankingSnapshot;
 }
 
 // ── Finding model ──
