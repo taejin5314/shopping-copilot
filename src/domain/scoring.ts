@@ -18,7 +18,7 @@ export interface ScoringWeights {
   price: number;
 }
 
-const DEFAULT_WEIGHTS: ScoringWeights = {
+export const DEFAULT_WEIGHTS: ScoringWeights = {
   stockCoverage: 0.5,
   convenience: 0.25,
   distance: 0.1,

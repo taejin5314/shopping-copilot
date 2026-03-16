@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { scoreStore, rankStores, buildRecommendation } from "../src/domain/scoring.js";
 import type { StoreStock } from "../src/core/types.js";
+import { ALL_GOLDEN_SCENARIOS, makeStock } from "./golden-ranking-fixtures.js";
 
 function makeStoreStock(
   storeId: string,
@@ -114,6 +115,29 @@ describe("rankStores", () => {
     assert.equal(ranked[0].store.storeId, "A");
     assert.equal(ranked[1].store.storeId, "B");
   });
+});
+
+// ──────────────────────────────────────────────
+// Golden ranking scenarios — regression guard for DEFAULT_WEIGHTS
+//
+// Scenarios are defined in test/golden-ranking-fixtures.ts and shared
+// with scripts/scoring-tuner.ts. Adding a scenario there registers it here.
+// ──────────────────────────────────────────────
+describe("golden ranking scenarios", () => {
+  for (const scenario of ALL_GOLDEN_SCENARIOS) {
+    it(scenario.name, () => {
+      const ranked = rankStores(scenario.stores, scenario.cart, undefined, scenario.ctx);
+      scenario.expectedOrder.forEach((expectedId, i) => {
+        assert.equal(
+          ranked[i]?.store.storeId,
+          expectedId,
+          `[${scenario.name}] position ${i}: expected "${expectedId}", ` +
+          `got "${ranked[i]?.store.storeId}" — ` +
+          `scores: ${ranked.map(r => `${r.store.storeId}=${r.totalScore.toFixed(3)}`).join(", ")}`,
+        );
+      });
+    });
+  }
 });
 
 describe("buildRecommendation", () => {
