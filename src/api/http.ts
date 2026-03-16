@@ -7,10 +7,12 @@ import { STRUCTUBE_CORPUS } from "../rag/structube-corpus.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { LlmSynthesizer } from "../llm/synthesizer.js";
 import type { CopilotConfig } from "./ask.js";
+import { makeLogExporter } from "../capture/capture-exporter.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:3000";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const CAPTURE_LOGS = process.env.CAPTURE_LOGS === "true";
 
 const provider = ANTHROPIC_API_KEY ? new AnthropicProvider({ apiKey: ANTHROPIC_API_KEY }) : undefined;
 
@@ -30,6 +32,7 @@ const config: CopilotConfig = {
     synthesizer: new LlmSynthesizer(provider),
     llmProvider: provider,
   }),
+  ...(CAPTURE_LOGS && { captureExporter: makeLogExporter() }),
 };
 
 const server = createHttpServer(config);
@@ -39,4 +42,7 @@ server.listen(PORT, () => {
   console.error(`GET  /health — health check`);
   console.error(`Retailers: ikea (default), structube`);
   console.error(`ikea-mcp upstream: ${MCP_URL}`);
+  if (CAPTURE_LOGS) {
+    console.error(`Capture logging: ENABLED — CaptureRecords emitted to stderr as [capture] <json>`);
+  }
 });

@@ -12,6 +12,7 @@ import { geocode } from "../domain/geocode.js";
 import type { GeocodeOptions } from "../domain/geocode.js";
 import { routeQuery } from "../llm/router.js";
 import { runQueryUnderstanding } from "../llm/query-understanding.js";
+import type { CaptureExporter } from "../capture/capture-exporter.js";
 
 // ──────────────────────────────────────────────
 // API entrypoint — single function surface
@@ -48,6 +49,12 @@ export interface CopilotConfig {
    * Default: undefined (disabled). Set conservatively based on measured p90 timings.
    */
   retailerTimeoutMs?: number;
+  /**
+   * Optional capture exporter. When set, a CaptureRecord is emitted after each
+   * successful request. Use makeLogExporter() to write records to stderr.
+   * Default: no-op (no capture).
+   */
+  captureExporter?: CaptureExporter;
 }
 
 /**
@@ -137,6 +144,7 @@ export async function ask(
     llmProvider: config.llmProvider,
     maxStoreResults: config.maxStoreResults,
     skipLlmForStructuredResults: config.skipLlmForStructuredResults,
+    captureExporter: config.captureExporter,
   };
 
   const _tQuery = performance.now();
