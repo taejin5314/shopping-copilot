@@ -207,7 +207,40 @@ const MULTI_ITEM_CART_FULL_BEATS_PARTIAL: GoldenScenario = {
 };
 
 /**
- * Scenario 8 [hand]: Quantity threshold — insufficient quantity ranks below sufficient.
+ * Scenario 8 [hand]: Cheap-far beats expensive-near — price weight (0.15) overrides
+ * distance weight (0.1) when stock is equal on both sides.
+ *
+ * Stock is identical (same item, same qty ≥ requested) so stockCoverageScore and
+ * convenienceScore are 1.0 for both stores. The only signals that differ are
+ * distanceScore and priceScore.
+ *
+ * Math (DEFAULT_WEIGHTS, USER_VANCOUVER lat=49.24):
+ *   cheap-far  (lat=49.82, price= 99): dist≈64.5 km → distScore≈0.437, priceScore=1.0
+ *              total = 1.0×0.5 + 1.0×0.25 + 0.437×0.1 + 1.0×0.15 ≈ 0.944
+ *   exp-near   (lat=49.28, price=499): dist≈4.4 km  → distScore≈0.918, priceScore=0.0
+ *              total = 1.0×0.5 + 1.0×0.25 + 0.918×0.1 + 0.0×0.15 ≈ 0.842
+ *   margin = 0.102 → deterministic under current weights.
+ *
+ * Exercises: the price-wins-over-distance tradeoff; distinct from CHEAPER_WINS
+ * (equal distance) and CLOSER_WINS (no price signal).
+ */
+const CHEAP_FAR_BEATS_EXPENSIVE_NEAR: GoldenScenario = {
+  name: "cheap-far-beats-expensive-near",
+  source: "hand",
+  stores: [
+    makeStock("cheap-far",    [{ itemNo: "001", quantity: 5 }], { lat: 49.82, lng: -123.12 }),
+    makeStock("expensive-near", [{ itemNo: "001", quantity: 5 }], { lat: 49.28, lng: -123.12 }),
+  ],
+  cart: [{ itemNo: "001", quantity: 1 }],
+  ctx: {
+    userLocation: USER_VANCOUVER,
+    getItemPrice: (storeId: string, _itemNo: string) => storeId === "cheap-far" ? 99 : 499,
+  },
+  expectedOrder: ["cheap-far", "expensive-near"],
+};
+
+/**
+ * Scenario 9 [hand]: Quantity threshold — insufficient quantity ranks below sufficient.
  *
  * User needs 3 units. Store A has only 2 (insufficient), Store B has 5 (sufficient).
  * Covers the quantity < requested → insufficient branch.
@@ -359,6 +392,7 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   UNKNOWN_STOCK_BY_DISTANCE,
   NO_LOCATION_STOCK_ONLY,
   MULTI_ITEM_CART_FULL_BEATS_PARTIAL,
+  CHEAP_FAR_BEATS_EXPENSIVE_NEAR,
   QUANTITY_THRESHOLD,
   COVERAGE_GRADIENT_THREE_STORES,
   QUANTITY_THRESHOLD_MULTI_ITEM_GRADIENT,
