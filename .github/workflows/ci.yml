@@ -39,5 +39,8 @@ jobs:
       # (ci/sample-review-input.json) and fails if any "fail"-severity finding
       # is detected.  See scripts/quality-gate.ts for threshold documentation.
 
+      - name: Golden ranking scenarios
+        run: npm run scoring:verify
+
       - name: Quality gate (CI sample)
         run: npm run review:gate -- --max-failed=0 ci/sample-review-input.json

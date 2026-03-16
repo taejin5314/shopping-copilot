@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "review": "tsx scripts/quality-review-cli.ts",
     "review:gate": "tsx scripts/quality-review-cli.ts --gate",
-    "ci:local": "npm run typecheck && npm test && npm run review:gate -- --max-failed=0 ci/sample-review-input.json"
+    "scoring:verify": "tsx scripts/scoring-verify.ts",
+    "ci:local": "npm run typecheck && npm test && npm run scoring:verify && npm run review:gate -- --max-failed=0 ci/sample-review-input.json"
   },
   "engines": {
     "node": ">=20"
