@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  ci:
+    name: Typecheck · Tests · Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Static checks ──────────────────────────────────────────────────────
+
+      - name: Typecheck (src/)
+        run: npm run typecheck
+
+      # ── Unit tests ─────────────────────────────────────────────────────────
+
+      - name: Tests
+        run: npm test
+
+      # ── Offline quality gate ───────────────────────────────────────────────
+      #
+      # Runs the review-pipeline over a small checked-in sample
+      # (ci/sample-review-input.json) and fails if any "fail"-severity finding
+      # is detected.  See scripts/quality-gate.ts for threshold documentation.
+
+      - name: Quality gate (CI sample)
+        run: npm run review:gate -- --max-failed=0 ci/sample-review-input.json

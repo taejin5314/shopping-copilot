@@ -1,0 +1,127 @@
+[
+  {
+    "_note": "Route A — IKEA product search, high confidence. Expected: 0 findings.",
+    "requestId": "ci-sample-001",
+    "query": "sofa bed under 800 minimalist",
+    "routerOutput": {
+      "intent": "search_product",
+      "retailerScope": "ikea",
+      "locationRequired": false,
+      "locationProvided": false,
+      "itemCardinality": "single",
+      "nextAgent": "query_understanding",
+      "confidence": 0.91,
+      "warnings": [],
+      "reasoningSummary": "User is searching for a sofa bed at IKEA with a budget and style constraint."
+    },
+    "routerUsed": true,
+    "queryUnderstandingOutput": {
+      "category": "sofa bed",
+      "keywords": ["sofa", "bed", "minimalist"],
+      "budgetMin": null,
+      "budgetMax": 800,
+      "color": null,
+      "size": null,
+      "material": null,
+      "style": "minimalist",
+      "retailerPreference": "ikea",
+      "mustBeInStock": false,
+      "locationTerms": [],
+      "itemCardinality": "single",
+      "warnings": []
+    },
+    "quUsed": true,
+    "finderCandidateCount": 3,
+    "topCandidateScore": 0.84,
+    "explanation": {
+      "summary": "Found 3 matching sofa beds at IKEA within your $800 budget.",
+      "explanationPoints": [
+        "Top result matches your minimalist style preference.",
+        "Price is within your $800 budget.",
+        "3 candidates scored and ranked by attribute match."
+      ],
+      "warnings": [],
+      "metadata": {
+        "retailerScope": "ikea",
+        "routerConfidence": 0.91,
+        "topCandidateScore": 0.84,
+        "budgetStatus": "within",
+        "attributesMatched": ["style"],
+        "attributesMissed": [],
+        "variantGroupingApplied": true,
+        "inputSource": "finderCandidates",
+        "fallbackUsed": false,
+        "candidateCount": 3
+      }
+    },
+    "inputSource": "finderCandidates",
+    "isCartIntent": false,
+    "warnings": []
+  },
+  {
+    "_note": "Route A — all-retailer search, no budget. Expected: 0 findings.",
+    "requestId": "ci-sample-002",
+    "query": "ergonomic office chair",
+    "routerOutput": {
+      "intent": "search_product",
+      "retailerScope": "all",
+      "locationRequired": false,
+      "locationProvided": false,
+      "itemCardinality": "single",
+      "nextAgent": "query_understanding",
+      "confidence": 0.88,
+      "warnings": [],
+      "reasoningSummary": "User is searching for an ergonomic office chair across all retailers."
+    },
+    "routerUsed": true,
+    "queryUnderstandingOutput": {
+      "category": "office chair",
+      "keywords": ["ergonomic", "office", "chair"],
+      "budgetMin": null,
+      "budgetMax": null,
+      "color": null,
+      "size": null,
+      "material": null,
+      "style": null,
+      "retailerPreference": "all",
+      "mustBeInStock": false,
+      "locationTerms": [],
+      "itemCardinality": "single",
+      "warnings": []
+    },
+    "quUsed": true,
+    "finderCandidateCount": 5,
+    "topCandidateScore": 0.76,
+    "explanation": {
+      "summary": "Found 5 ergonomic office chairs across supported retailers.",
+      "explanationPoints": [
+        "Top result has a strong attribute match score.",
+        "5 candidates scored and ranked across all supported retailers."
+      ],
+      "warnings": [],
+      "metadata": {
+        "retailerScope": "all",
+        "routerConfidence": 0.88,
+        "topCandidateScore": 0.76,
+        "budgetStatus": "unknown",
+        "attributesMatched": [],
+        "attributesMissed": [],
+        "variantGroupingApplied": true,
+        "inputSource": "finderCandidates",
+        "fallbackUsed": false,
+        "candidateCount": 5
+      }
+    },
+    "inputSource": "finderCandidates",
+    "isCartIntent": false,
+    "warnings": []
+  },
+  {
+    "_note": "Route B — basic keyword fallback (no QU stage). Expected: 1 info finding (path:fallback-used), 0 fail/warn.",
+    "requestId": "ci-sample-003",
+    "query": "dining table",
+    "inputSource": "foundProducts",
+    "finderCandidateCount": 4,
+    "warnings": []
+  }
+]

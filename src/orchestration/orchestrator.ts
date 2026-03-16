@@ -28,6 +28,8 @@ import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
 import type { GeoCoord } from "../domain/geo.js";
 import { haversineKm } from "../domain/geo.js";
+import { buildCaptureRecord } from "../capture/capture-exporter.js";
+import type { CaptureExporter } from "../capture/capture-exporter.js";
 
 // ──────────────────────────────────────────────
 // Orchestration — routes intent → adapters/RAG → scorer → response
@@ -48,6 +50,14 @@ export interface OrchestratorConfig {
    * Default: true. Set to false to always use LLM synthesis.
    */
   skipLlmForStructuredResults?: boolean;
+  /**
+   * Optional capture exporter. When provided, a compact CaptureRecord is built
+   * after each successful request and passed to this callback.
+   * Use makeLogExporter() to emit records to stderr for offline review, or
+   * makeNullExporter() (the default) for no-op behaviour.
+   * The callback runs after the response is built; failures are non-fatal.
+   */
+  captureExporter?: CaptureExporter;
 }
 
 export interface QueryContext {
@@ -391,7 +401,7 @@ export async function handleQuery(
     perf(config.synthesizer && !structuredOnly ? "synthesis (llm)" : "synthesis (fallback)", _tSynth);
     perf("handleQuery total", _t0);
 
-    return {
+    const response: CopilotResponse = {
       intent,
       toolCallsUsed: toolCalls,
       retrievedKnowledge,
@@ -402,6 +412,27 @@ export async function handleQuery(
       warnings,
       explanation,
     };
+
+    // ── Capture export (opt-in, non-fatal) ──
+    if (config.captureExporter) {
+      try {
+        const captureRecord = buildCaptureRecord({
+          query,
+          routerOutput: ro,
+          queryUnderstandingOutput: context?.queryUnderstandingOutput,
+          explanation,
+          warnings: [...warnings],
+          isCartIntent:
+            context?.queryUnderstandingOutput?.itemCardinality === "multiple" ||
+            ro?.intent === "check_cart",
+        });
+        config.captureExporter(captureRecord);
+      } catch (captureErr) {
+        console.error("[capture] export failed:", captureErr);
+      }
+    }
+
+    return response;
   } catch (err) {
     if (err instanceof CopilotError) throw err;
     throw new CopilotError("INTERNAL", `Orchestration failed: ${String(err)}`, adapter.retailerId, err);

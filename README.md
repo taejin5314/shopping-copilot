@@ -226,10 +226,10 @@ src/
 ## Tests
 
 ```bash
-npm test              # 120 unit tests (no external services needed)
+npm test              # unit tests (no external services needed)
 npm run test:api      # API integration tests (requires live ikea-mcp)
 npm run test:integration  # Full integration tests (requires live ikea-mcp)
-npm run test:all      # All tests (120 unit + 14 integration = 134)
+npm run test:all      # All tests
 ```
 
 | Test Suite | Count | What it covers |
@@ -242,6 +242,29 @@ npm run test:all      # All tests (120 unit + 14 integration = 134)
 | distance | 18 | Haversine, score normalization, distance-aware ranking |
 | price | 13 | Price normalization, cross-retailer, mixed signals |
 | geocode | 12 | Nominatim resolution, failure modes, distance scoring integration |
+
+## Offline quality review
+
+The review pipeline scores logged pipeline outputs against a set of heuristics and reports findings by severity (`fail` / `warn` / `info`).
+
+```bash
+# Review a file and print findings
+npm run review -- ci/sample-review-input.json
+
+# Run the quality gate (exits 1 if any fail-severity finding is found)
+npm run review:gate -- --max-failed=0 ci/sample-review-input.json
+
+# Typecheck + tests + quality gate in one command
+npm run ci:local
+```
+
+The CI workflow runs `npm run review:gate -- --max-failed=0 ci/sample-review-input.json` automatically on every push and pull request. The sample input at [`ci/sample-review-input.json`](ci/sample-review-input.json) is the checked-in fixture; `test/ci-sample.test.ts` verifies it stays in sync with the gate logic.
+
+When running in GitHub Actions, the CLI automatically detects `$GITHUB_STEP_SUMMARY` and appends a concise GFM job summary (gate status, failed checks, key counts, fallback rate, top categories). Pass `--summary-file=<path>` to write the summary locally:
+
+```bash
+npm run review:gate -- --max-failed=0 --summary-file=summary.md ci/sample-review-input.json
+```
 
 ## Tech Stack
 
