@@ -1,0 +1,42 @@
+﻿[
+  {
+    "id": "fixture-001",
+    "timestamp": "2026-03-16T00:00:00.000Z",
+    "query": "find best store for KALLAX shelf, LACK table, BILLY bookcase near me",
+    "rankingSnapshot": {
+      "stores": [
+        {
+          "store": { "retailer": "ikea", "storeId": "burnaby", "label": "IKEA Burnaby" },
+          "items": [
+            { "itemNo": "20275885", "available": true,  "quantity": 3,  "stockLevel": "HIGH_IN_STOCK", "canNotify": null },
+            { "itemNo": "70210433", "available": true,  "quantity": 2,  "stockLevel": "LOW_IN_STOCK",  "canNotify": null },
+            { "itemNo": "90301843", "available": true,  "quantity": 4,  "stockLevel": "HIGH_IN_STOCK", "canNotify": null }
+          ]
+        },
+        {
+          "store": { "retailer": "ikea", "storeId": "richmond", "label": "IKEA Richmond" },
+          "items": [
+            { "itemNo": "20275885", "available": true,  "quantity": 2,  "stockLevel": "LOW_IN_STOCK",  "canNotify": null },
+            { "itemNo": "70210433", "available": false, "quantity": 0,  "stockLevel": "OUT_OF_STOCK",  "canNotify": true  },
+            { "itemNo": "90301843", "available": true,  "quantity": 3,  "stockLevel": "HIGH_IN_STOCK", "canNotify": null }
+          ]
+        },
+        {
+          "store": { "retailer": "ikea", "storeId": "langley", "label": "IKEA Langley" },
+          "items": [
+            { "itemNo": "20275885", "available": true,  "quantity": 1,  "stockLevel": "LOW_IN_STOCK",  "canNotify": null },
+            { "itemNo": "70210433", "available": false, "quantity": 0,  "stockLevel": "OUT_OF_STOCK",  "canNotify": true  },
+            { "itemNo": "90301843", "available": false, "quantity": 0,  "stockLevel": "OUT_OF_STOCK",  "canNotify": true  }
+          ]
+        }
+      ],
+      "cart": [
+        { "itemNo": "20275885", "quantity": 1 },
+        { "itemNo": "70210433", "quantity": 1 },
+        { "itemNo": "90301843", "quantity": 1 }
+      ],
+      "rankedIds": ["burnaby", "richmond", "langley"]
+    },
+    "warnings": []
+  }
+]

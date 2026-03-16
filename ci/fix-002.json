@@ -1,0 +1,38 @@
+﻿[
+  {
+    "id": "fixture-002",
+    "timestamp": "2026-03-16T01:00:00.000Z",
+    "query": "need 3 PAX wardrobes and 3 BERGSHULT shelves for my new place",
+    "rankingSnapshot": {
+      "stores": [
+        {
+          "store": { "retailer": "ikea", "storeId": "depot", "label": "IKEA Coquitlam" },
+          "items": [
+            { "itemNo": "90408138", "available": true,  "quantity": 5, "stockLevel": "HIGH_IN_STOCK", "canNotify": null },
+            { "itemNo": "50308847", "available": true,  "quantity": 4, "stockLevel": "HIGH_IN_STOCK", "canNotify": null }
+          ]
+        },
+        {
+          "store": { "retailer": "ikea", "storeId": "branch", "label": "IKEA North Vancouver" },
+          "items": [
+            { "itemNo": "90408138", "available": true,  "quantity": 5, "stockLevel": "HIGH_IN_STOCK", "canNotify": null },
+            { "itemNo": "50308847", "available": true,  "quantity": 2, "stockLevel": "LOW_IN_STOCK",  "canNotify": null }
+          ]
+        },
+        {
+          "store": { "retailer": "ikea", "storeId": "outlet", "label": "IKEA Abbotsford" },
+          "items": [
+            { "itemNo": "90408138", "available": true,  "quantity": 2, "stockLevel": "LOW_IN_STOCK",  "canNotify": null },
+            { "itemNo": "50308847", "available": true,  "quantity": 1, "stockLevel": "LOW_IN_STOCK",  "canNotify": null }
+          ]
+        }
+      ],
+      "cart": [
+        { "itemNo": "90408138", "quantity": 3 },
+        { "itemNo": "50308847", "quantity": 3 }
+      ],
+      "rankedIds": ["depot", "branch", "outlet"]
+    },
+    "warnings": []
+  }
+]

@@ -10,12 +10,14 @@
  *   [log:ci-sample-001] — pattern from ci/sample-review-input.json record 001
  *   [log:ci-sample-002] — pattern from ci/sample-review-input.json record 002
  *   [log:ci-sample-003] — pattern from ci/sample-review-input.json record 003
+ *   [log:fixture-001]   — ci/fix-001.json, extracted via extract-ranking-scenarios CLI
+ *   [log:fixture-002]   — ci/fix-002.json, extracted via extract-ranking-scenarios CLI
+ *   [log:fixture-003]   — ci/fix-003.json, extracted via extract-ranking-scenarios CLI
  *
- * NOTE: Real capture logs (CaptureRecord) do not include StoreStock[] arrays —
- * store inventory is a live API response and is not persisted. Scenarios labelled
- * [log:*] are hand-authored to reflect the query/intent pattern from that log entry,
- * not extracted verbatim. When log capture is extended to include store stock data,
- * replace hand-authored fixtures with extracted ones.
+ * Scenarios labelled [log:ci-sample-*] are hand-authored to reflect query/intent
+ * patterns. Scenarios labelled [log:fixture-*] were created as structured JSON
+ * fixtures (ci/fix-*.json) and processed through the extract-ranking-scenarios CLI,
+ * validating the full log→import→extract→promote pipeline end-to-end.
  */
 
 import type { StoreStock } from "../src/core/types.js";
@@ -222,6 +224,131 @@ const QUANTITY_THRESHOLD: GoldenScenario = {
   expectedOrder: ["has-enough", "too-few"],
 };
 
+/**
+ * Scenario 9 [log:fixture-001]: 3-store coverage gradient — 3/3 > 2/3 > 1/3 items.
+ *
+ * Source: ci/fix-001.json (extracted via scripts/extract-ranking-scenarios.ts)
+ * Pattern: find_best_store for a 3-item cart; stores stock different subsets.
+ * burnaby covers all 3 items, richmond misses LACK (70210433), langley misses LACK+BILLY.
+ * No user location → stockCoverage is the sole signal; gradient is strict (1.0 > 0.67 > 0.33).
+ * New shape: 3-store, 3-item, continuous stockCoverage gradient without distance.
+ */
+const COVERAGE_GRADIENT_THREE_STORES: GoldenScenario = {
+  name: "coverage-gradient-three-stores",
+  source: "log:fixture-001",
+  stores: [
+    {
+      store: { retailer: "ikea", storeId: "burnaby", label: "IKEA Burnaby" },
+      items: [
+        { itemNo: "20275885", available: true,  quantity: 3, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+        { itemNo: "70210433", available: true,  quantity: 2, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+        { itemNo: "90301843", available: true,  quantity: 4, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+      ],
+    },
+    {
+      store: { retailer: "ikea", storeId: "richmond", label: "IKEA Richmond" },
+      items: [
+        { itemNo: "20275885", available: true,  quantity: 2, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+        { itemNo: "70210433", available: false, quantity: 0, stockLevel: "OUT_OF_STOCK",  canNotify: true  },
+        { itemNo: "90301843", available: true,  quantity: 3, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+      ],
+    },
+    {
+      store: { retailer: "ikea", storeId: "langley", label: "IKEA Langley" },
+      items: [
+        { itemNo: "20275885", available: true,  quantity: 1, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+        { itemNo: "70210433", available: false, quantity: 0, stockLevel: "OUT_OF_STOCK",  canNotify: true  },
+        { itemNo: "90301843", available: false, quantity: 0, stockLevel: "OUT_OF_STOCK",  canNotify: true  },
+      ],
+    },
+  ],
+  cart: [
+    { itemNo: "20275885", quantity: 1 },
+    { itemNo: "70210433", quantity: 1 },
+    { itemNo: "90301843", quantity: 1 },
+  ],
+  ctx: undefined,
+  expectedOrder: ["burnaby", "richmond", "langley"],
+};
+
+/**
+ * Scenario 10 [log:fixture-002]: Quantity threshold + 2-item cart + 3-store gradient.
+ *
+ * Source: ci/fix-002.json (extracted via scripts/extract-ranking-scenarios.ts)
+ * Pattern: user needs 3 of each item; stores vary in whether they meet the quantity threshold.
+ * depot: both items sufficient (5≥3, 4≥3) → coverage 2/2=1.0
+ * branch: first sufficient (5≥3), second not (2<3) → coverage 1/2=0.5
+ * outlet: neither sufficient (2<3, 1<3) → coverage 0/2=0.0
+ * New shape: quantity requirement combined with 2-item multi-cart 3-store gradient.
+ * Distinct from QUANTITY_THRESHOLD (1 item, 2 stores) and MULTI_ITEM_CART (3 items, no qty req).
+ */
+const QUANTITY_THRESHOLD_MULTI_ITEM_GRADIENT: GoldenScenario = {
+  name: "quantity-threshold-multi-item-gradient",
+  source: "log:fixture-002",
+  stores: [
+    {
+      store: { retailer: "ikea", storeId: "depot",  label: "IKEA Coquitlam"      },
+      items: [
+        { itemNo: "90408138", available: true, quantity: 5, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+        { itemNo: "50308847", available: true, quantity: 4, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+      ],
+    },
+    {
+      store: { retailer: "ikea", storeId: "branch", label: "IKEA North Vancouver" },
+      items: [
+        { itemNo: "90408138", available: true, quantity: 5, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+        { itemNo: "50308847", available: true, quantity: 2, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+      ],
+    },
+    {
+      store: { retailer: "ikea", storeId: "outlet", label: "IKEA Abbotsford"      },
+      items: [
+        { itemNo: "90408138", available: true, quantity: 2, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+        { itemNo: "50308847", available: true, quantity: 1, stockLevel: "LOW_IN_STOCK",  canNotify: null },
+      ],
+    },
+  ],
+  cart: [
+    { itemNo: "90408138", quantity: 3 },
+    { itemNo: "50308847", quantity: 3 },
+  ],
+  ctx: undefined,
+  expectedOrder: ["depot", "branch", "outlet"],
+};
+
+/**
+ * Scenario 11 [log:fixture-003]: Real stock beats UNKNOWN stock.
+ *
+ * Source: ci/fix-003.json (extracted via scripts/extract-ranking-scenarios.ts)
+ * Pattern: cross-retailer check — one store (IKEA) has confirmed stock, another (Structube)
+ * returns UNKNOWN (no per-store inventory exposed by their API).
+ * real-stock: stockCoverage=1.0 (item available, quantity=8)
+ * unknown-stock: allUnknown=true → stockCoverage=0.5 (neutral heuristic)
+ * New shape: mixed-retailer single-item, real-stock vs UNKNOWN-stock.
+ * Distinct from UNKNOWN_STOCK_BY_DISTANCE (both stores UNKNOWN, distance decides).
+ */
+const REAL_STOCK_BEATS_UNKNOWN: GoldenScenario = {
+  name: "real-stock-beats-unknown",
+  source: "log:fixture-003",
+  stores: [
+    {
+      store: { retailer: "ikea",     storeId: "real-stock",    label: "IKEA Richmond"    },
+      items: [
+        { itemNo: "20275885", available: true, quantity: 8, stockLevel: "HIGH_IN_STOCK", canNotify: null },
+      ],
+    },
+    {
+      store: { retailer: "structube", storeId: "unknown-stock", label: "Structube Robson" },
+      items: [
+        { itemNo: "20275885", available: null, quantity: null, stockLevel: "UNKNOWN", canNotify: null },
+      ],
+    },
+  ],
+  cart: [{ itemNo: "20275885", quantity: 1 }],
+  ctx: undefined,
+  expectedOrder: ["real-stock", "unknown-stock"],
+};
+
 // ── Export ──
 
 export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
@@ -233,6 +360,9 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   NO_LOCATION_STOCK_ONLY,
   MULTI_ITEM_CART_FULL_BEATS_PARTIAL,
   QUANTITY_THRESHOLD,
+  COVERAGE_GRADIENT_THREE_STORES,
+  QUANTITY_THRESHOLD_MULTI_ITEM_GRADIENT,
+  REAL_STOCK_BEATS_UNKNOWN,
 ];
 
 // ── Log extraction ──
