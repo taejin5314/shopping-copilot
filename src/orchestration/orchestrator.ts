@@ -104,14 +104,14 @@ export async function handleQuery(
   const _intentAfterCart = intent.type;
 
   // Apply router output: upgrade intent when the pattern-based classifier returned "unknown".
-  // "find_best_store" and "check_cart" both map to the stock pipeline;
-  // "search_product" is already handled by the existing classifier.
+  // "find_best_store" and "check_cart" both map to the stock pipeline.
+  // "search_product" stays "unknown" — the unknown block below (Route A / Route B) runs the
+  //   actual product search and sets intent to "product_info" once products are found.
+  //   Upgrading to "product_info" here would skip the search entirely.
   const ro = context?.routerOutput;
   if (ro && intent.type === "unknown") {
     if (ro.intent === "find_best_store" || ro.intent === "check_cart") {
       intent.type = "stock";
-    } else if (ro.intent === "search_product") {
-      intent.type = "product_info";
     }
   }
 
