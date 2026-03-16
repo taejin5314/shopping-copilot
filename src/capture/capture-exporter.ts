@@ -16,7 +16,7 @@
 import type { RouterOutput } from "../llm/router.js";
 import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
 import type { ExplanationOutput } from "../core/types.js";
-import type { CaptureRecord } from "./capture-record.js";
+import type { CaptureRecord, RankingSnapshot } from "./capture-record.js";
 
 // ── Input model ──
 
@@ -55,6 +55,12 @@ export interface CaptureInputs {
 
   /** Whether QU flagged this as a multi-product cart intent. */
   isCartIntent?: boolean;
+
+  /**
+   * Snapshot of the store-ranking call for this request.
+   * Set by the orchestrator when rankStores() runs (stock or auto-rank path).
+   */
+  rankingSnapshot?: RankingSnapshot;
 }
 
 // ── Core builder ──
@@ -117,6 +123,10 @@ export function buildCaptureRecord(inputs: CaptureInputs): CaptureRecord {
 
   if (isCartIntent !== undefined) {
     record.isCartIntent = isCartIntent;
+  }
+
+  if (inputs.rankingSnapshot !== undefined) {
+    record.rankingSnapshot = inputs.rankingSnapshot;
   }
 
   return record;

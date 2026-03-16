@@ -30,6 +30,7 @@ import type { GeoCoord } from "../domain/geo.js";
 import { haversineKm } from "../domain/geo.js";
 import { buildCaptureRecord } from "../capture/capture-exporter.js";
 import type { CaptureExporter } from "../capture/capture-exporter.js";
+import type { RankingSnapshot } from "../capture/capture-record.js";
 
 // ──────────────────────────────────────────────
 // Orchestration — routes intent → adapters/RAG → scorer → response
@@ -143,6 +144,7 @@ export async function handleQuery(
     warnings.push(...ro.warnings.map((w) => `[Router] ${w}`));
   }
   let recommendation: RecommendationResult | null = null;
+  let rankingSnapshot: RankingSnapshot | undefined;
   let retrievedKnowledge: PolicyHit[] = [];
   let foundProducts: ProductInfo[] = [];
   let explanation: ExplanationOutput | undefined;
@@ -171,6 +173,11 @@ export async function handleQuery(
             };
             const ranked = rankStores(storeStocks, cart, undefined, scoringCtx);
             recommendation = buildRecommendation(ranked, cart, config.maxStoreResults ?? 3);
+            rankingSnapshot = {
+              stores: storeStocks,
+              cart,
+              rankedIds: ranked.map((s) => s.store.storeId),
+            };
             if (!context?.location) {
               warnings.push("No user location provided — distance scoring and radius filtering were not applied.");
             }
@@ -351,6 +358,11 @@ export async function handleQuery(
           const scoringCtx: ScoringContext = { userLocation: context?.location };
           const ranked = rankStores(filteredStocks, topCart, undefined, scoringCtx);
           recommendation = buildRecommendation(ranked, topCart, config.maxStoreResults ?? 3);
+          rankingSnapshot = {
+            stores: filteredStocks,
+            cart: topCart,
+            rankedIds: ranked.map((s) => s.store.storeId),
+          };
           const allStockUnknown = storeStocks.every((ss) =>
             ss.items.every((item) => item.stockLevel === "UNKNOWN"),
           );
@@ -425,6 +437,7 @@ export async function handleQuery(
           isCartIntent:
             context?.queryUnderstandingOutput?.itemCardinality === "multiple" ||
             ro?.intent === "check_cart",
+          rankingSnapshot,
         });
         config.captureExporter(captureRecord);
       } catch (captureErr) {

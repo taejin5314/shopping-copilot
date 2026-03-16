@@ -522,3 +522,48 @@ describe("CaptureRecord — importer field compatibility", () => {
     assert.equal(parsed.topCandidateScore, null);
   });
 });
+
+// ── buildCaptureRecord — rankingSnapshot ──
+
+describe("buildCaptureRecord — rankingSnapshot", () => {
+  const snap = {
+    stores: [
+      {
+        store: { retailer: "test", storeId: "A", label: "Store A" },
+        items: [{ itemNo: "001", available: true, quantity: 5, stockLevel: null, canNotify: null }],
+      },
+      {
+        store: { retailer: "test", storeId: "B", label: "Store B" },
+        items: [{ itemNo: "001", available: false, quantity: 0, stockLevel: null, canNotify: null }],
+      },
+    ],
+    cart: [{ itemNo: "001", quantity: 2 }],
+    rankedIds: ["A", "B"],
+  };
+
+  it("rankingSnapshot is set when provided", () => {
+    const record = buildCaptureRecord({ query: "shelf", rankingSnapshot: snap });
+    assert.deepEqual(record.rankingSnapshot, snap);
+  });
+
+  it("rankingSnapshot is absent when not provided", () => {
+    const record = buildCaptureRecord({ query: "shelf" });
+    assert.equal(record.rankingSnapshot, undefined);
+  });
+
+  it("rankingSnapshot survives JSON round-trip", () => {
+    const record = buildCaptureRecord({ query: "shelf", rankingSnapshot: snap });
+    const parsed = JSON.parse(serializeCaptureRecord(record));
+    assert.deepEqual(parsed.rankingSnapshot.rankedIds, ["A", "B"]);
+    assert.equal(parsed.rankingSnapshot.cart[0].itemNo, "001");
+    assert.equal(parsed.rankingSnapshot.stores.length, 2);
+  });
+
+  it("rankedIds order is preserved", () => {
+    const record = buildCaptureRecord({
+      query: "shelf",
+      rankingSnapshot: { ...snap, rankedIds: ["B", "A"] },
+    });
+    assert.deepEqual(record.rankingSnapshot?.rankedIds, ["B", "A"]);
+  });
+});

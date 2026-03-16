@@ -11,7 +11,20 @@
 
 import type { RouterOutput } from "../llm/router.js";
 import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
-import type { ExplanationOutput } from "../core/types.js";
+import type { ExplanationOutput, StoreStock } from "../core/types.js";
+
+/**
+ * Snapshot of one store-ranking invocation.
+ * Allows offline extraction of golden ranking scenarios from production logs.
+ */
+export interface RankingSnapshot {
+  /** All stores that were scored (pre-truncation). */
+  stores: StoreStock[];
+  /** Cart used as the ranking objective. */
+  cart: Array<{ itemNo: string; quantity: number }>;
+  /** storeIds in final rank order (highest score first). */
+  rankedIds: string[];
+}
 
 export interface CaptureRecord {
   /** Request or trace identifier (maps to PipelineReviewInput.id). Optional — only set when available. */
@@ -80,6 +93,14 @@ export interface CaptureRecord {
 
   /** All accumulated pipeline warnings from all stages. */
   warnings: string[];
+
+  /**
+   * Snapshot of the store-ranking call that produced `recommendation`.
+   * Present only when a stock or auto-rank path ran and stores were scored.
+   * Enables offline extraction of golden ranking scenarios — see
+   * test/golden-ranking-fixtures.ts extractScenariosFromCaptures().
+   */
+  rankingSnapshot?: RankingSnapshot;
 
   /**
    * Schema version. Increment when breaking changes are made to this shape.

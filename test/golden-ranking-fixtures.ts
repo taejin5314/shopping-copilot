@@ -20,6 +20,7 @@
 
 import type { StoreStock } from "../src/core/types.js";
 import type { ScoringContext } from "../src/domain/scoring.js";
+import type { CaptureRecord } from "../src/capture/capture-record.js";
 
 // ── Types ──
 
@@ -233,3 +234,45 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   MULTI_ITEM_CART_FULL_BEATS_PARTIAL,
   QUANTITY_THRESHOLD,
 ];
+
+// ── Log extraction ──
+//
+// Convert CaptureRecord objects (with rankingSnapshot populated) into
+// GoldenScenario instances. The expectedOrder is the rankedIds from the
+// live run — i.e. we treat the actual ranking as ground truth.
+//
+// Usage:
+//   const scenarios = extractScenariosFromCaptures(capturedRecords);
+//   // review/filter manually, then add to ALL_GOLDEN_SCENARIOS
+
+/**
+ * Convert one CaptureRecord into a GoldenScenario.
+ * Returns null when rankingSnapshot is absent.
+ *
+ * The caller is responsible for reviewing expectedOrder before promoting
+ * a log-derived scenario to ALL_GOLDEN_SCENARIOS — the live ranking is used
+ * as ground truth, which is correct only if the run was correct.
+ */
+export function scenarioFromCapture(record: CaptureRecord, name?: string): GoldenScenario | null {
+  const snap = record.rankingSnapshot;
+  if (!snap || snap.stores.length === 0 || snap.rankedIds.length === 0) return null;
+  return {
+    name: name ?? `log:${record.id ?? record.timestamp}`,
+    source: `log:${record.id ?? "captured"}`,
+    stores: snap.stores,
+    cart: snap.cart,
+    ctx: undefined, // user location is not persisted in CaptureRecord
+    expectedOrder: snap.rankedIds,
+  };
+}
+
+/**
+ * Convert a batch of CaptureRecords into GoldenScenarios, filtering out
+ * records without a rankingSnapshot.
+ */
+export function extractScenariosFromCaptures(records: CaptureRecord[]): GoldenScenario[] {
+  return records.flatMap((r) => {
+    const s = scenarioFromCapture(r);
+    return s ? [s] : [];
+  });
+}
