@@ -7,6 +7,7 @@ import type {
   StoreStock,
   ClassifiedIntent,
   ProductInfo,
+  ExplanationOutput,
 } from "../core/types.js";
 import { CopilotError } from "../core/types.js";
 import type { RetailerAdapter } from "../core/adapter.js";
@@ -20,6 +21,8 @@ import type { QueryUnderstandingOutput } from "../llm/query-understanding.js";
 import { normalizeForRetail } from "../domain/retail-query-normalizer.js";
 import { findProducts, candidateToProductInfo } from "../domain/product-finder.js";
 import type { ProductCandidate } from "../domain/product-finder.js";
+import { buildExplanation } from "../domain/explanation.js";
+import type { ExplanationInput } from "../domain/explanation.js";
 import { classifyIntent } from "../domain/intent.js";
 import { rankStores, buildRecommendation } from "../domain/scoring.js";
 import type { CartItem, ScoringContext } from "../domain/scoring.js";
@@ -132,6 +135,7 @@ export async function handleQuery(
   let recommendation: RecommendationResult | null = null;
   let retrievedKnowledge: PolicyHit[] = [];
   let foundProducts: ProductInfo[] = [];
+  let explanation: ExplanationOutput | undefined;
   const citations: Citation[] = [];
 
   const { adapter, retriever } = config;
@@ -304,10 +308,11 @@ export async function handleQuery(
         // isCartIntent: QU says multiple product types → preserve distinct items.
         //               check_cart via router upgrades intent to "stock" before this
         //               block is reached, so it only fires here as a defence-in-depth.
+        const isCartIntent = quOutput?.itemCardinality === "multiple" || ro?.intent === "check_cart";
+        let autoRankCartResult: AutoRankCart | null = null;
         try {
-          const isCartIntent = quOutput?.itemCardinality === "multiple" || ro?.intent === "check_cart";
-          const { cart: variantCart, inputSource: autoRankSource, variantGroupingApplied } =
-            buildAutoRankCart(finderCandidates, foundProducts, { isCartIntent, maxVariants: 3 });
+          autoRankCartResult = buildAutoRankCart(finderCandidates, foundProducts, { isCartIntent, maxVariants: 3 });
+          const { cart: variantCart, inputSource: autoRankSource, variantGroupingApplied } = autoRankCartResult;
           console.error("[orchestrator:auto-rank]", JSON.stringify({
             inputSource: autoRankSource,
             variantGroupingApplied,
@@ -347,6 +352,30 @@ export async function handleQuery(
           console.error("[orchestrator] store ranking after product search failed:", rankErr);
           // Non-fatal: products are still returned even if store ranking fails
         }
+
+        // Build deterministic explanation from all pipeline outputs.
+        const explanationInput: ExplanationInput = {
+          query,
+          routerOutput: ro,
+          queryUnderstandingOutput: quOutput ?? undefined,
+          finderCandidates: finderCandidates ?? undefined,
+          foundProductCount: finderCandidates == null ? foundProducts.length : undefined,
+          variantGroupingApplied: autoRankCartResult?.variantGroupingApplied,
+          inputSource: autoRankCartResult?.inputSource,
+          isCartIntent,
+          pipelineWarnings: [...warnings],
+        };
+        explanation = buildExplanation(explanationInput);
+        console.error("[explanation]", JSON.stringify({
+          built: true,
+          inputSource: autoRankCartResult?.inputSource ?? null,
+          candidateCount: finderCandidates?.length ?? 0,
+          fallbackUsed: autoRankCartResult?.inputSource === "foundProducts",
+        }));
+        // Merge explanation warnings into pipeline warnings (deduplicated).
+        for (const w of explanation.warnings) {
+          if (!warnings.includes(w)) warnings.push(w);
+        }
       }
     }
 
@@ -354,7 +383,7 @@ export async function handleQuery(
       config.skipLlmForStructuredResults !== false &&
       (intent.type === "stock" || intent.type === "recommendation") &&
       retrievedKnowledge.length === 0;
-    const synthInput = { query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings };
+    const synthInput = { query, intent, recommendation, knowledge: retrievedKnowledge, products: foundProducts, warnings, explanation };
     const _tSynth = performance.now();
     const answer = config.synthesizer && !structuredOnly
       ? await config.synthesizer.synthesize(synthInput)
@@ -371,6 +400,7 @@ export async function handleQuery(
       citations,
       products: foundProducts.length > 0 ? foundProducts : undefined,
       warnings,
+      explanation,
     };
   } catch (err) {
     if (err instanceof CopilotError) throw err;

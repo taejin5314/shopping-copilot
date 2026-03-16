@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { LlmSynthesizer, fallbackAnswer } from "../src/llm/synthesizer.js";
 import type { SynthesisInput } from "../src/llm/synthesizer.js";
 import type { LlmProvider, LlmMessage, LlmResponse, LlmOptions } from "../src/llm/provider.js";
-import type { ClassifiedIntent, RecommendationResult, PolicyHit, ScoredStore } from "../src/core/types.js";
+import type { ClassifiedIntent, RecommendationResult, PolicyHit, ScoredStore, ExplanationOutput } from "../src/core/types.js";
 
 // ── Fixtures ──
 
@@ -211,5 +211,45 @@ describe("LlmSynthesizer", () => {
     const synth = new LlmSynthesizer(provider);
     const result = await synth.synthesize(makeInput({ recommendation: null }));
     assert.ok(result.includes("wasn't able to find"));
+  });
+
+  it("includes explanation evidence in prompt when provided", async () => {
+    const provider = mockProvider("answer");
+    const synth = new LlmSynthesizer(provider);
+    const explanation: ExplanationOutput = {
+      summary: "Found 2 sofas matching your search.",
+      explanationPoints: ["Keywords matched: sofa.", 'Attributes matched: color "beige".'],
+      warnings: [],
+      metadata: {
+        retailerScope: null,
+        routerConfidence: 0.9,
+        topCandidateScore: 0.85,
+        budgetStatus: null,
+        attributesMatched: ['color "beige"'],
+        attributesMissed: [],
+        variantGroupingApplied: true,
+        inputSource: "finderCandidates",
+        fallbackUsed: false,
+        candidateCount: 2,
+      },
+    };
+    await synth.synthesize(makeInput({ explanation }));
+
+    const completeFn = provider.complete as ReturnType<typeof mock.fn>;
+    const [messages] = completeFn.mock.calls[0].arguments as [LlmMessage[]];
+    const userContent = messages[1].content;
+    assert.ok(userContent.includes("Product Search Explanation"), "should have explanation section header");
+    assert.ok(userContent.includes("Found 2 sofas"), "should include explanation summary");
+    assert.ok(userContent.includes("Keywords matched"), "should include explanation points");
+  });
+
+  it("prompt omits explanation section when explanation is absent", async () => {
+    const provider = mockProvider("answer");
+    const synth = new LlmSynthesizer(provider);
+    await synth.synthesize(makeInput()); // no explanation
+
+    const completeFn = provider.complete as ReturnType<typeof mock.fn>;
+    const [messages] = completeFn.mock.calls[0].arguments as [LlmMessage[]];
+    assert.ok(!messages[1].content.includes("Product Search Explanation"));
   });
 });

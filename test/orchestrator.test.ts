@@ -466,3 +466,130 @@ describe("orchestrator — response shape invariants", () => {
     assert.ok(typeof resp.answer === "string");
   });
 });
+
+// ────────────────────────────────────────────────
+// Explanation integration
+// ────────────────────────────────────────────────
+
+describe("orchestrator — explanation in Route A response", () => {
+  it("explanation is defined with summary and points when products are found", async () => {
+    const products = [makeProduct({ itemNo: "S1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products), {
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    assert.ok(resp.explanation, "explanation should be present");
+    assert.ok(typeof resp.explanation!.summary === "string");
+    assert.ok(resp.explanation!.summary.length > 0);
+    assert.ok(Array.isArray(resp.explanation!.explanationPoints));
+    assert.ok(Array.isArray(resp.explanation!.warnings));
+    assert.ok(typeof resp.explanation!.metadata === "object");
+  });
+
+  it("explanation metadata: inputSource=finderCandidates, fallbackUsed=false", async () => {
+    const products = [makeProduct({ itemNo: "S1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products), {
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    assert.equal(resp.explanation!.metadata.inputSource, "finderCandidates");
+    assert.equal(resp.explanation!.metadata.fallbackUsed, false);
+  });
+
+  it("explanation candidateCount matches the number of products returned by adapter", async () => {
+    const products = [
+      makeProduct({ itemNo: "S1", name: "SÖDERHAMN Sofa" }),
+      makeProduct({ itemNo: "S2", name: "SÖDERHAMN Sofa" }),
+    ];
+    const resp = await handleQuery("sofa", baseConfig(products), {
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    assert.equal(resp.explanation!.metadata.candidateCount, 2);
+  });
+});
+
+describe("orchestrator — explanation in Route B response", () => {
+  it("explanation is defined when Route B finds products", async () => {
+    const products = [makeProduct({ itemNo: "P1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products));
+    assert.ok(resp.explanation, "Route B should still produce an explanation");
+  });
+
+  it("explanation metadata: inputSource=foundProducts, fallbackUsed=true", async () => {
+    const products = [makeProduct({ itemNo: "P1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products));
+    assert.equal(resp.explanation!.metadata.inputSource, "foundProducts");
+    assert.equal(resp.explanation!.metadata.fallbackUsed, true);
+  });
+
+  it("Route B summary includes product count", async () => {
+    const products = [makeProduct({ itemNo: "P1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products));
+    assert.ok(resp.explanation!.summary.includes("1"));
+  });
+});
+
+describe("orchestrator — explanation absent when no products found", () => {
+  it("explanation is undefined when adapter returns nothing", async () => {
+    const resp = await handleQuery("sofa", baseConfig([]));
+    assert.equal(resp.explanation, undefined);
+  });
+
+  it("explanation is undefined for Route A with empty adapter", async () => {
+    const resp = await handleQuery("sofa", baseConfig([]), {
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    assert.equal(resp.explanation, undefined);
+  });
+});
+
+describe("orchestrator — explanation warnings merged into response.warnings", () => {
+  it("low-confidence router warning appears in response.warnings exactly once", async () => {
+    const products = [makeProduct({ itemNo: "S1", name: "SÖDERHAMN Sofa" })];
+    const lowConfRouter: RouterOutput = {
+      ...ROUTER_SEARCH_PRODUCT,
+      confidence: 0.5,
+    };
+    const resp = await handleQuery("sofa", baseConfig(products), {
+      routerOutput: lowConfRouter,
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    const confidenceWarnings = resp.warnings.filter((w) => w.includes("confidence"));
+    // Must appear — explanation emits it
+    assert.ok(confidenceWarnings.length > 0, "confidence warning should be present");
+    // Must not be duplicated
+    assert.equal(confidenceWarnings.length, 1, "confidence warning must appear exactly once");
+  });
+
+  it("high-confidence router produces no confidence warning", async () => {
+    const products = [makeProduct({ itemNo: "S1", name: "SÖDERHAMN Sofa" })];
+    const resp = await handleQuery("sofa", baseConfig(products), {
+      routerOutput: ROUTER_SEARCH_PRODUCT, // confidence: 0.9
+      queryUnderstandingOutput: QU_SINGLE,
+    });
+    const confidenceWarnings = resp.warnings.filter((w) => w.includes("confidence"));
+    assert.equal(confidenceWarnings.length, 0);
+  });
+});
+
+describe("orchestrator — backward compatibility with explanation", () => {
+  it("response without explanation still has all required fields", async () => {
+    // policy intent — no product search, no explanation
+    const resp = await handleQuery("What is the return policy?", baseConfig([]));
+    assert.equal(resp.intent.type, "policy");
+    assert.ok(typeof resp.answer === "string");
+    assert.ok(Array.isArray(resp.warnings));
+    assert.equal(resp.explanation, undefined);
+  });
+
+  it("stock intent produces no explanation", async () => {
+    const resp = await handleQuery(
+      "stores near me",
+      baseConfig([]),
+      {
+        routerOutput: ROUTER_FIND_STORE,
+        cart: [{ itemNo: "001.001.01", quantity: 1 }],
+      },
+    );
+    assert.equal(resp.intent.type, "stock");
+    assert.equal(resp.explanation, undefined);
+  });
+});

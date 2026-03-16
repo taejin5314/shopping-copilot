@@ -4,6 +4,7 @@ import type {
   RecommendationResult,
   PolicyHit,
   ProductInfo,
+  ExplanationOutput,
 } from "../core/types.js";
 
 // ──────────────────────────────────────────────
@@ -18,6 +19,8 @@ export interface SynthesisInput {
   /** Product search results (e.g. from product_info fallback). */
   products?: ProductInfo[];
   warnings: string[];
+  /** Deterministic explanation from the pipeline — fed to the LLM as grounded evidence. */
+  explanation?: ExplanationOutput;
 }
 
 export interface Synthesizer {
@@ -150,6 +153,14 @@ function buildPrompt(input: SynthesisInput): LlmMessage[] {
     evidenceParts.push("\n## Retrieved Policy Knowledge");
     for (const hit of input.knowledge) {
       evidenceParts.push(`- [${hit.title}](${hit.source}): ${hit.content}`);
+    }
+  }
+
+  if (input.explanation) {
+    evidenceParts.push("\n## Product Search Explanation");
+    evidenceParts.push(input.explanation.summary);
+    for (const pt of input.explanation.explanationPoints) {
+      evidenceParts.push(`- ${pt}`);
     }
   }
 

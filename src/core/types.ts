@@ -110,6 +110,42 @@ export interface RecommendationResult {
   warnings: string[];
 }
 
+// ── Explanation ──
+
+export interface ExplanationMetadata {
+  /** Retailer scope used ("ikea", "structube", "all", …). */
+  retailerScope: string | null;
+  /** Router confidence 0–1, or null when router was not invoked. */
+  routerConfidence: number | null;
+  /** matchScore of the top candidate (0–1), null when no candidates. */
+  topCandidateScore: number | null;
+  /** Whether the top candidate's price fits the budget. */
+  budgetStatus: "within" | "exceeded" | "way_exceeded" | "unknown" | null;
+  /** QU attributes found in the top candidate. */
+  attributesMatched: string[];
+  /** QU attributes requested but not found in the top candidate. */
+  attributesMissed: string[];
+  /** Whether topVariantGroup was applied (product-discovery mode). */
+  variantGroupingApplied: boolean;
+  /** Data source used to drive the inventory lookup. */
+  inputSource: "finderCandidates" | "foundProducts" | null;
+  /** true when Route B (basic keyword search) was used instead of Product Finder. */
+  fallbackUsed: boolean;
+  /** Number of scored Product Finder candidates (0 for Route B). */
+  candidateCount: number;
+}
+
+export interface ExplanationOutput {
+  /** One-sentence user-facing summary. */
+  summary: string;
+  /** Ordered explanation points about match quality, constraints, scope, and path. */
+  explanationPoints: string[];
+  /** Warnings surfaced by the explanation layer (e.g. low router confidence). */
+  warnings: string[];
+  /** Structured fields for UI or debugging. */
+  metadata: ExplanationMetadata;
+}
+
 // ── Response ──
 
 export interface CopilotResponse {
@@ -122,6 +158,8 @@ export interface CopilotResponse {
   warnings: string[];
   /** Product search results, if any. Used for richer answer synthesis. */
   products?: ProductInfo[];
+  /** Deterministic explanation of what was found and why. */
+  explanation?: ExplanationOutput;
 }
 
 export interface ToolCallRecord {
