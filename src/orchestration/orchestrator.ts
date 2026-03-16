@@ -300,14 +300,20 @@ export async function handleQuery(
         for (const p of foundProducts) {
           if (p.url) citations.push({ label: productCitationLabel(p), url: p.url });
         }
-        // Auto-rank stores by best-availability variant. Restrict to variants of the
-        // single highest-scored product (topVariantGroup) so a sofa and a desk aren't
-        // treated as a cart. Fall back to foundProducts when Product Finder wasn't used.
+        // Auto-rank stores — build the inventory lookup cart via the contract helper.
+        // isCartIntent: QU says multiple product types → preserve distinct items.
+        //               check_cart via router upgrades intent to "stock" before this
+        //               block is reached, so it only fires here as a defence-in-depth.
         try {
-          const variantSource = finderCandidates
-            ? topVariantGroup(finderCandidates).map(candidateToProductInfo)
-            : foundProducts;
-          const variantCart: CartItem[] = variantSource.slice(0, 3).map((p) => ({ itemNo: p.itemNo, quantity: 1 }));
+          const isCartIntent = quOutput?.itemCardinality === "multiple" || ro?.intent === "check_cart";
+          const { cart: variantCart, inputSource: autoRankSource, variantGroupingApplied } =
+            buildAutoRankCart(finderCandidates, foundProducts, { isCartIntent, maxVariants: 3 });
+          console.error("[orchestrator:auto-rank]", JSON.stringify({
+            inputSource: autoRankSource,
+            variantGroupingApplied,
+            cartSize: variantCart.length,
+            isCartIntent,
+          }));
           const storeStocks = await fetchStoreStocks(adapter, variantCart, countryCode, intent, config, toolCalls, context);
 
           // Pick the variant SKU with the most stores having it available.
@@ -481,6 +487,64 @@ function topVariantGroup(candidates: ProductCandidate[]): ProductCandidate[] {
     (c) => `${c.retailer}:${c.name.toLowerCase().trim()}` === groupKey,
   );
   return group.length > 0 ? group : [top];
+}
+
+// ── Auto-rank cart contract ──
+
+/** Identifies which data source was used to build the inventory lookup cart. */
+export type AutoRankInputSource = "finderCandidates" | "foundProducts";
+
+export interface AutoRankCart {
+  cart: CartItem[];
+  /** Whether topVariantGroup narrowing was applied (product-discovery mode only). */
+  variantGroupingApplied: boolean;
+  /** Input source used to derive the cart. */
+  inputSource: AutoRankInputSource;
+}
+
+/**
+ * Build the CartItem list for the post-search auto-rank inventory lookup.
+ *
+ * Two modes, determined by `isCartIntent`:
+ *
+ * Product-discovery (isCartIntent=false, default):
+ *   Applies topVariantGroup to restrict the cart to variants of the single
+ *   highest-scored product.  Prevents unrelated products (sofa + desk) from
+ *   being checked together as if they were a cart.
+ *
+ * Cart-intent (isCartIntent=true — triggered by QU itemCardinality="multiple"):
+ *   Preserves all distinct candidates as separate line items.  Used when the
+ *   user explicitly requested multiple product types ("I want a sofa and a desk").
+ *
+ * Fallback (finderCandidates null or empty — Route B):
+ *   Uses foundProducts unchanged.  Identical to the pre-Route-A behaviour.
+ *
+ * Always prefers itemNo; falls back to productId when itemNo is null.
+ */
+export function buildAutoRankCart(
+  finderCandidates: ProductCandidate[] | null,
+  foundProducts: ProductInfo[],
+  opts: { isCartIntent: boolean; maxVariants?: number },
+): AutoRankCart {
+  const maxVariants = opts.maxVariants ?? 3;
+
+  if (finderCandidates && finderCandidates.length > 0) {
+    const grouped = opts.isCartIntent
+      ? finderCandidates.slice(0, maxVariants)            // cart intent: all distinct items
+      : topVariantGroup(finderCandidates).slice(0, maxVariants); // discovery: best product's variants
+    return {
+      cart: grouped.map((c) => ({ itemNo: c.itemNo ?? c.productId, quantity: 1 })),
+      variantGroupingApplied: !opts.isCartIntent,
+      inputSource: "finderCandidates",
+    };
+  }
+
+  // Route B / no candidates: unchanged fallback.
+  return {
+    cart: foundProducts.slice(0, maxVariants).map((p) => ({ itemNo: p.itemNo, quantity: 1 })),
+    variantGroupingApplied: false,
+    inputSource: "foundProducts",
+  };
 }
 
 async function timed<T>(
