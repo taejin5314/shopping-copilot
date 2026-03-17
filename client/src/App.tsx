@@ -41,6 +41,7 @@ export default function App() {
   const [query, setQuery]       = useState("");
   const [retailer, setRetailer] = useState("");
   const [radiusKm, setRadiusKm] = useState<number | null>(25);
+  const [locationText, setLocationText] = useState("");
   const [status, setStatus]     = useState<"idle" | "loading" | "done" | "error">("idle");
   const [result, setResult]     = useState<CopilotResponse | null>(null);
   const [error, setError]       = useState<string | null>(null);
@@ -59,7 +60,13 @@ export default function App() {
 
     const body: QueryRequest = { query: finalQuery };
     if (retailer) body.retailer = retailer;
-    if (geo.lat != null && geo.lng != null) {
+    // Prefer browser GPS; fall back to manually entered locationText.
+    if (geo.lat != null && geo.lng != null && !locationText.trim()) {
+      body.location = { lat: geo.lat, lng: geo.lng };
+      if (radiusKm != null) body.radiusKm = radiusKm;
+    } else if (locationText.trim()) {
+      body.locationText = locationText.trim();
+    } else if (geo.lat != null && geo.lng != null) {
       body.location = { lat: geo.lat, lng: geo.lng };
       if (radiusKm != null) body.radiusKm = radiusKm;
     }
@@ -81,7 +88,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setStatus("error");
     }
-  }, [query, retailer, radiusKm, geo]);
+  }, [query, retailer, radiusKm, locationText, geo]);
 
   const handleExampleClick = (example: string) => {
     setQuery(example);
@@ -114,6 +121,8 @@ export default function App() {
         onExample={handleExampleClick}
         geo={geo}
         onRetryGeo={retryGeo}
+        locationText={locationText}
+        onLocationTextChange={setLocationText}
         retailer={retailer}
         onRetailerChange={setRetailer}
         radiusKm={radiusKm}
@@ -132,6 +141,8 @@ export default function App() {
         loading={status === "loading"}
         geo={geo}
         onRetryGeo={retryGeo}
+        locationText={locationText}
+        onLocationTextChange={setLocationText}
         retailer={retailer}
         onRetailerChange={setRetailer}
         radiusKm={radiusKm}

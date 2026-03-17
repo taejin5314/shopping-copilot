@@ -10,9 +10,11 @@ interface Props {
   loading: boolean;
   geo: GeoState;
   onRetry: () => void;
+  locationText: string;
+  onLocationTextChange: (v: string) => void;
 }
 
-export default function HeroSearch({ query, onQueryChange, onSubmit, loading, geo, onRetry }: Props) {
+export default function HeroSearch({ query, onQueryChange, onSubmit, loading, geo, onRetry, locationText, onLocationTextChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -50,7 +52,12 @@ export default function HeroSearch({ query, onQueryChange, onSubmit, loading, ge
             Find stores
           </button>
         </div>
-        <LocationStatus geo={geo} onRetry={onRetry} />
+        <LocationStatus
+          geo={geo}
+          onRetryGeo={onRetry}
+          locationText={locationText}
+          onLocationTextChange={onLocationTextChange}
+        />
       </div>
     </div>
   );

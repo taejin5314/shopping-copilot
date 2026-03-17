@@ -279,6 +279,7 @@ img    { display: block; max-width: 100%; }
 .loc-dot.ok         { background: var(--success); }
 .loc-dot.detecting  { background: #8FAA5A; animation: pulse 1.6s ease-in-out infinite; }
 .loc-dot.denied     { background: var(--warn-text); }
+.loc-dot.manual     { background: var(--accent); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -291,6 +292,34 @@ img    { display: block; max-width: 100%; }
   color: var(--text-muted);
   font-weight: 400;
 }
+.location-text--warn { color: var(--warn-text); }
+.loc-name { font-weight: 600; color: var(--text-2); }
+
+/* Inline "Change" / "Enter location" link-button */
+.location-change-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  flex-shrink: 0;
+}
+.location-change-btn:hover { color: var(--accent-hover); }
+
+/* Slightly more prominent variant used when it's the main CTA */
+.location-change-btn--action {
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  text-decoration: none;
+}
+.location-change-btn--action:hover { background: var(--accent-subtle); }
+
 .location-retry {
   background: none;
   border: 1px solid var(--border);
@@ -302,8 +331,88 @@ img    { display: block; max-width: 100%; }
   color: var(--text-3);
   cursor: pointer;
   transition: border-color .15s, color .15s;
+  flex-shrink: 0;
 }
 .location-retry:hover { border-color: var(--border-strong); color: var(--text-2); }
+
+/* Input fallback row */
+.location-status-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+  padding-left: 4px;
+}
+.location-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.location-input-icon {
+  font-size: .78rem;
+  flex-shrink: 0;
+  line-height: 1;
+  color: var(--text-3);
+}
+.location-text-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: 5px 9px;
+  outline: none;
+  transition: border-color .15s;
+}
+.location-text-input::placeholder { color: var(--text-muted); }
+.location-text-input:focus        { border-color: var(--accent); }
+.location-apply-btn {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 5px 11px;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+}
+.location-apply-btn:hover    { background: var(--accent-hover); }
+.location-apply-btn:disabled { opacity: .4; cursor: not-allowed; }
+.location-cancel-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  font-size: .76rem;
+  color: var(--text-3);
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color .15s, color .15s;
+}
+.location-cancel-btn:hover { border-color: var(--border-strong); color: var(--text-2); }
+.location-hint {
+  display: flex;
+  padding-left: 18px;
+}
+.location-hint-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.location-hint-link:hover { color: var(--text-2); }
 
 /* ── PromptChips ── */
 .prompt-chips {

@@ -1,4 +1,5 @@
 import SecondaryFilters from "./SecondaryFilters";
+import LocationStatus from "./LocationStatus";
 
 type GeoState = { status: "detecting" | "ok" | "denied"; lat: number | null; lng: number | null };
 
@@ -9,6 +10,8 @@ interface Props {
   loading: boolean;
   geo: GeoState;
   onRetryGeo: () => void;
+  locationText: string;
+  onLocationTextChange: (v: string) => void;
   retailer: string;
   onRetailerChange: (v: string) => void;
   radiusKm: number | null;
@@ -18,7 +21,8 @@ interface Props {
 
 export default function SearchShell({
   query, onQueryChange, onSubmit, loading,
-  geo, retailer, onRetailerChange,
+  geo, onRetryGeo, locationText, onLocationTextChange,
+  retailer, onRetailerChange,
   radiusKm, onRadiusChange,
   onLogoClick,
 }: Props) {
@@ -53,6 +57,12 @@ export default function SearchShell({
           </div>
         </div>
         <div className="sticky-filters-wrap">
+          <LocationStatus
+            geo={geo}
+            onRetryGeo={onRetryGeo}
+            locationText={locationText}
+            onLocationTextChange={onLocationTextChange}
+          />
           <SecondaryFilters
             retailer={retailer}
             onRetailerChange={onRetailerChange}

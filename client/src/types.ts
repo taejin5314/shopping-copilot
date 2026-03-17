@@ -77,5 +77,6 @@ export interface QueryRequest {
   query: string;
   retailer?: string;
   location?: { lat: number; lng: number };
+  locationText?: string;
   radiusKm?: number;
 }

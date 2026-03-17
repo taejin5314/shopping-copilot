@@ -13,6 +13,8 @@ interface Props {
   onExample: (q: string) => void;
   geo: GeoState;
   onRetryGeo: () => void;
+  locationText: string;
+  onLocationTextChange: (v: string) => void;
   retailer: string;
   onRetailerChange: (v: string) => void;
   radiusKm: number | null;
@@ -22,6 +24,7 @@ interface Props {
 export default function EmptyState({
   query, onQueryChange, onSubmit, loading,
   onExample, geo, onRetryGeo,
+  locationText, onLocationTextChange,
   retailer, onRetailerChange,
   radiusKm, onRadiusChange,
 }: Props) {
@@ -45,6 +48,8 @@ export default function EmptyState({
           loading={loading}
           geo={geo}
           onRetry={onRetryGeo}
+          locationText={locationText}
+          onLocationTextChange={onLocationTextChange}
         />
         <PromptChips onChipClick={onExample} />
         <SecondaryFilters
