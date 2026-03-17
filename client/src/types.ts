@@ -36,6 +36,8 @@ export interface RankedStore {
   stockCoverageScore: number;
   convenienceScore: number;
   distanceScore: number | null;
+  /** Actual distance in km — populated when user location is available. */
+  distanceKm: number | null;
   priceScore: number | null;
   totalScore: number;
   itemDetails: ItemDetail[];

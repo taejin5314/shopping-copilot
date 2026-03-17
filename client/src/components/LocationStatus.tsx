@@ -122,4 +122,3 @@ export default function LocationStatus({ geo, onRetryGeo, locationText, onLocati
     </div>
   );
 }
-

@@ -13,15 +13,12 @@ function storeLabel(s: RankedStore): string {
   return formatStoreName(raw, s.store.retailer);
 }
 
-function pct(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return Math.round(n * 100) + "%";
-}
-
 function approxDist(s: RankedStore): string | null {
-  if (s.distanceScore == null) return null;
-  const km = Math.round((1 - s.distanceScore) * 150);
-  return km < 5 ? "< 5 km" : `~${km} km`;
+  if (s.distanceKm == null) return null;
+  const km = s.distanceKm;
+  if (km < 1) return "< 1 km";
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
 }
 
 function stockInfo(s: RankedStore): { label: string; cls: string } {
@@ -47,12 +44,11 @@ function buildWhy(s: RankedStore, pts: string[]): string[] {
   if (pts.length > 0) return pts.slice(0, 3);
   const out: string[] = [];
   const { label: sl, cls } = stockInfo(s);
-  if (cls === "val-ok")      out.push(`Full stock coverage — ${sl}`);
-  else if (sl !== "—")       out.push(`Partial stock — ${sl}`);
-  if (s.convenienceScore > 0.6) out.push("Good pickup availability and convenience");
+  if (cls === "val-ok")  out.push(sl !== "—" ? sl : "All items in stock");
+  else if (sl !== "—")   out.push(`${sl} available`);
   const d = approxDist(s);
-  if (d && (s.distanceScore ?? 0) > 0.6) out.push(`Close by — ${d}`);
-  if ((s.priceScore ?? 0) > 0.7)         out.push("Competitive pricing");
+  if (d) out.push(`About ${d} away`);
+  if ((s.priceScore ?? 0) > 0.7) out.push("Competitive pricing");
   return out.slice(0, 3);
 }
 
@@ -83,7 +79,6 @@ export default function StoreRecommendationCard({ store, rank, explanationPoints
           <div className="store-card-name">{storeLabel(store)}</div>
           <span className="store-retailer-badge">{store.store.retailer.toUpperCase()}</span>
         </div>
-        <div className="store-card-score">{pct(store.totalScore)} match</div>
       </div>
 
       <div className="store-card-stats">
@@ -96,12 +91,6 @@ export default function StoreRecommendationCard({ store, rank, explanationPoints
         <div className="store-stat">
           <div className="store-stat-label">Stock</div>
           <div className={`store-stat-value ${stockCls}`}>{sl}</div>
-        </div>
-        <div className="store-stat">
-          <div className="store-stat-label">Pickup</div>
-          <div className="store-stat-value">
-            {store.convenienceScore > 0.6 ? "Today" : "Check store"}
-          </div>
         </div>
         {store.priceScore != null && (
           <div className="store-stat">
@@ -118,7 +107,7 @@ export default function StoreRecommendationCard({ store, rank, explanationPoints
           <div className="why-title">Why this store</div>
           {why.map((pt, i) => (
             <div key={i} className="why-point">
-              <span className="why-arrow">→</span>
+              <span className="why-check">✓</span>
               <span>{pt}</span>
             </div>
           ))}

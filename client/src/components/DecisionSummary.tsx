@@ -5,9 +5,11 @@ function storeLabel(s: RankedStore): string {
 }
 
 function storeDistance(s: RankedStore): string | null {
-  if (s.distanceScore == null) return null;
-  const approxKm = Math.round((1 - s.distanceScore) * 150);
-  return approxKm < 5 ? "< 5 km" : `~${approxKm} km`;
+  if (s.distanceKm == null) return null;
+  const km = s.distanceKm;
+  if (km < 1) return "< 1 km";
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
 }
 
 function stockSummary(s: RankedStore): string {
