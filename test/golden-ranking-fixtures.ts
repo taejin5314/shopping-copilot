@@ -428,6 +428,54 @@ const NYC_STOCK_BEATS_PROXIMITY: GoldenScenario = {
   expectedOrder: ["154", "409", "921"],
 };
 
+/** Reference user location: downtown Los Angeles. */
+export const USER_LA = { lat: 34.05, lng: -118.24 };
+
+/**
+ * Scenario 15 [live:live-003]: Zero-stock beats distance in LA/SoCal.
+ * MORABO sofa with chaise (19575880), radius=80km from downtown LA.
+ * 413 (Covina CA) has qty=0 and ranks last despite being only 33km away.
+ * The 3 stocked stores rank by distance: Burbank(closest) > Carson > Costa Mesa.
+ * Coords from actual ikea-mcp store data (captured). Engine verified.
+ */
+const LA_ZERO_STOCK_BEATS_DISTANCE: GoldenScenario = {
+  name: "la-zero-stock-beats-distance",
+  source: "live:live-003",
+  stores: [
+    makeStock("162", [{ itemNo: "19575880", quantity: 3 }], { lat: 33.8255, lng: -118.2646 }), // Carson, CA
+    makeStock("167", [{ itemNo: "19575880", quantity: 1 }], { lat: 33.6861, lng: -117.8873 }), // Costa Mesa, CA
+    makeStock("399", [{ itemNo: "19575880", quantity: 1 }], { lat: 34.1608, lng: -118.3013 }), // Burbank, CA
+    makeStock("413", [{ itemNo: "19575880", quantity: 0 }], { lat: 34.0758, lng: -117.8872 }), // Covina, CA — out of stock
+  ],
+  cart: [{ itemNo: "19575880", quantity: 1 }],
+  ctx: { userLocation: USER_LA },
+  expectedOrder: ["399", "162", "167", "413"],
+};
+
+/** Reference user location: downtown Chicago. */
+export const USER_CHICAGO = { lat: 41.88, lng: -87.63 };
+
+/**
+ * Scenario 16 [live:live-004]: Zero-stock ranks last despite mid-range distance (Chicago).
+ * KIVIK sofa with chaise (29482847), radius=260km from downtown Chicago.
+ * 536 (Fishers IN) has qty=0 and ranks last at ~254km.
+ * Stocked stores rank by distance: Schaumburg(33km) > Bolingbrook(44km) > Oak Creek(115km).
+ * Coords from actual ikea-mcp store data (captured). Engine verified.
+ */
+const CHICAGO_ZERO_STOCK_LAST: GoldenScenario = {
+  name: "chicago-zero-stock-last",
+  source: "live:live-004",
+  stores: [
+    makeStock("210", [{ itemNo: "29482847", quantity: 3 }], { lat: 42.0104, lng: -88.0611 }), // Schaumburg, IL
+    makeStock("170", [{ itemNo: "29482847", quantity: 2 }], { lat: 41.6972, lng: -88.0881 }), // Bolingbrook, IL
+    makeStock("560", [{ itemNo: "29482847", quantity: 3 }], { lat: 42.8943, lng: -87.9099 }), // Oak Creek, WI
+    makeStock("536", [{ itemNo: "29482847", quantity: 0 }], { lat: 39.9572, lng: -85.9853 }), // Fishers, IN — out of stock
+  ],
+  cart: [{ itemNo: "29482847", quantity: 1 }],
+  ctx: { userLocation: USER_CHICAGO },
+  expectedOrder: ["210", "170", "560", "536"],
+};
+
 // ── Export ──
 
 export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
@@ -445,6 +493,8 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   REAL_STOCK_BEATS_UNKNOWN,
   NYC_DISTANCE_ORDER,
   NYC_STOCK_BEATS_PROXIMITY,
+  LA_ZERO_STOCK_BEATS_DISTANCE,
+  CHICAGO_ZERO_STOCK_LAST,
 ];
 
 // ── Log extraction ──
