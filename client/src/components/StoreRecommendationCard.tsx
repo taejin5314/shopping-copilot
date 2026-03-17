@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { RankedStore } from "../types";
 
 function storeLabel(s: RankedStore): string {
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export default function StoreRecommendationCard({ store, rank, explanationPoints }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const d = approxDist(store);
   const { label: sl, cls: stockCls } = stockInfo(store);
   const why = buildWhy(store, rank === 1 ? explanationPoints : []);
@@ -107,13 +109,31 @@ export default function StoreRecommendationCard({ store, rank, explanationPoints
       )}
 
       <div className="store-card-ctas">
-        <button className="btn-secondary">View details</button>
+        {store.itemDetails.length > 0 && (
+          <button className="btn-secondary" onClick={() => setExpanded(e => !e)}>
+            {expanded ? "Hide details" : "View details"}
+          </button>
+        )}
         {mapsUrl && (
           <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="btn-primary">
             Get directions
           </a>
         )}
       </div>
+
+      {expanded && store.itemDetails.length > 0 && (
+        <div className="store-item-details">
+          {store.itemDetails.map(d => (
+            <div key={d.itemNo} className="store-item-row">
+              <span className="store-item-no">{d.itemNo}</span>
+              <span className={`store-item-stock ${d.sufficient ? "val-ok" : "val-partial"}`}>
+                {d.available != null ? `${d.available} in stock` : "Unknown"}
+              </span>
+              <span className="store-item-needed">need {d.requested}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
