@@ -9,6 +9,7 @@ env:
   REGION: us-central1
   SERVICE: shopilot
   REGISTRY: us-central1-docker.pkg.dev
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ── GCP 사전 설정 (최초 1회) ─────────────────────────────────────────────────
 #
