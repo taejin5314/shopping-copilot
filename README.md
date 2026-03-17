@@ -1,8 +1,8 @@
-# Shopping Copilot
+# Shopilot
 
 Retailer-agnostic shopping assistant that compares stores across multiple retailers using deterministic recommendation logic, policy retrieval (RAG), and optional LLM synthesis.
 
-> **Status:** v0.1.0 — functional demo, deployed on [Render](https://render.com).
+> **Status:** v0.1.0 — functional demo, deployed on [Google Cloud Run](https://cloud.google.com/run).
 
 ## What it does
 
@@ -283,28 +283,45 @@ The project ships with a multi-stage Dockerfile that bundles both shopping-copil
 ### Docker (local)
 
 ```bash
-docker build -t shopping-copilot .
-docker run -p 4000:4000 shopping-copilot
+docker build -t shopilot .
+docker run -p 4000:4000 shopilot
 # → http://localhost:4000
 
 # With LLM synthesis:
-docker run -p 4000:4000 -e ANTHROPIC_API_KEY=sk-ant-... shopping-copilot
+docker run -p 4000:4000 -e ANTHROPIC_API_KEY=sk-ant-... shopilot
 ```
 
-### Render / Railway / Fly.io
+### Google Cloud Run (production)
 
-All three detect the Dockerfile automatically:
+Automated via GitHub Actions ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). Every push to `master` builds the Docker image, pushes to Artifact Registry, and deploys to Cloud Run.
 
-1. Push this repo to GitHub
-2. Create a new **Web Service** pointing at the repo
-3. Set environment variables:
-   - `PORT` — usually set automatically by the platform
-   - `ANTHROPIC_API_KEY` — optional, for LLM synthesis
-4. Deploy
+**Prerequisites (one-time GCP setup):**
 
-The container starts ikea-mcp internally on port 3000, so no separate MCP service is needed.
+1. Enable APIs: Cloud Run, Cloud Build, Artifact Registry, IAM Credentials, Secret Manager
+2. Create Artifact Registry repository:
+   ```bash
+   gcloud artifacts repositories create shopilot \
+     --repository-format=docker --location=us-central1
+   ```
+3. Set up [Workload Identity Federation](https://github.com/google-github-actions/auth#setting-up-workload-identity-federation)
+4. Add GitHub Secrets: `GCP_PROJECT_ID`, `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`
+5. Register API keys in Secret Manager:
+   ```bash
+   echo -n "sk-ant-..." | gcloud secrets versions add ANTHROPIC_API_KEY --data-file=-
+   ```
 
-> **Note:** Free-tier services may cold-start in ~30s after inactivity. The MCP connection includes retry logic (3 attempts, 2s delay) to handle this gracefully.
+The container starts ikea-mcp internally on port 3000, so no separate MCP service is needed. Cloud Run scales to zero when idle — no cost when not in use.
+
+### Analytics & Data Collection
+
+Product click events are tracked via **Google Analytics 4** (`select_item` event with `item_id`, `item_name`, `item_brand`, `price`).
+
+To enable:
+1. Create a GA4 property and copy the Measurement ID (`G-XXXXXXXXXX`)
+2. Replace `GA_MEASUREMENT_ID` in [`public/index.html`](public/index.html) with your ID
+3. Enable **BigQuery Export** in GA4 → Admin → BigQuery Links
+
+Click data flows into BigQuery automatically and can be used to build training datasets for recommendation model fine-tuning.
 
 ## License
 
