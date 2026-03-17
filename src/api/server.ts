@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ask } from "./ask.js";
 import type { CopilotConfig } from "./ask.js";
@@ -13,10 +13,17 @@ import type { ShopilotEvent } from "../events/event-logger.js";
 // ──────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = resolve(__dirname, "../../public");
 const INDEX_HTML = readFileSync(
-  resolve(__dirname, "../../public/index.html"),
+  resolve(PUBLIC_DIR, "index.html"),
   "utf-8",
 );
+
+const MIME: Record<string, string> = {
+  ".js":  "application/javascript",
+  ".css": "text/css",
+  ".map": "application/json",
+};
 
 const BODY_LIMIT = 256 * 1024; // 256 KB
 const EVENTS_BODY_LIMIT = 64 * 1024; // 64 KB — events are small
@@ -66,6 +73,18 @@ export function createHttpServer(config: CopilotConfig) {
 
       if (url === "/health" && method === "GET") {
         sendJson(res, 200, { status: "ok", build: BUILD_TS, version: "0.1.1" });
+        return;
+      }
+
+      if (url.startsWith("/assets/") && method === "GET") {
+        const assetPath = resolve(PUBLIC_DIR, url.slice(1)); // strip leading /
+        if (assetPath.startsWith(PUBLIC_DIR) && existsSync(assetPath)) {
+          const mime = MIME[extname(assetPath)] ?? "application/octet-stream";
+          const data = readFileSync(assetPath);
+          res.writeHead(200, { "Content-Type": mime, "Cache-Control": "public,max-age=31536000,immutable" }).end(data);
+        } else {
+          res.writeHead(404).end("Not found");
+        }
         return;
       }
 
