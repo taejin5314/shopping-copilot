@@ -40,9 +40,10 @@ export default function HeroSearch({ query, onQueryChange, onSubmit, loading, ge
             value={query}
             onChange={e => onQueryChange(e.target.value)}
             onKeyDown={handleKey}
-            placeholder='e.g. "white desk near North York"'
+            placeholder='Try "white desk near North York" or "sofa available today"'
             disabled={loading}
             autoFocus
+            aria-label="Search for a product"
           />
           <button
             className="search-submit-btn"

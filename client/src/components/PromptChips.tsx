@@ -11,10 +11,10 @@ interface Props {
 export default function PromptChips({ onChipClick }: Props) {
   return (
     <div className="prompt-chips">
-      <span className="chips-label">Try an example</span>
+      <span className="chips-label">Or try an example</span>
       <div className="chips-row">
         {CHIPS.map(chip => (
-          <button key={chip} className="prompt-chip" onClick={() => onChipClick(chip)}>
+          <button key={chip} className="prompt-chip" onClick={() => onChipClick(chip)} aria-label={`Search: ${chip}`}>
             {chip}
           </button>
         ))}

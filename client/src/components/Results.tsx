@@ -1,4 +1,4 @@
-import type { CopilotResponse, ProductInfo } from "../types";
+import type { CopilotResponse, ProductInfo, RankedStore } from "../types";
 import ResultSummary from "./ResultSummary";
 import StoreRecommendationCard from "./StoreRecommendationCard";
 import ComparisonTable from "./ComparisonTable";
@@ -68,11 +68,55 @@ function ProductSection({
   );
 }
 
+// ── Contextual notice for partial/weak results ───────────────────────────────
+interface NoticeInfo { icon: string; text: string; hint: string }
+
+function buildNotice(result: CopilotResponse, ranked: RankedStore[]): NoticeInfo | null {
+  if (ranked.length === 0) return null;
+
+  const top = ranked[0];
+
+  // Partial stock: top store is missing some of the requested items
+  if (top.itemDetails.length > 1) {
+    const covered = top.itemDetails.filter(d => d.sufficient).length;
+    if (covered < top.itemDetails.length) {
+      return {
+        icon: "◑",
+        text: `The best options we found cover ${covered} of ${top.itemDetails.length} items.`,
+        hint: "Some items may need to be sourced separately or checked directly in-store.",
+      };
+    }
+  }
+
+  // No location — distance-aware ranking unavailable
+  if (ranked.every(r => r.distanceKm == null)) {
+    return {
+      icon: "◎",
+      text: "Results shown without a specific location.",
+      hint: "Add your city or postal code under the search bar for more relevant nearby options.",
+    };
+  }
+
+  // Single-retailer coverage only (when multiple are expected)
+  const retailers = new Set(ranked.map(r => r.store.retailer));
+  if (retailers.size === 1 && ranked.length >= 2) {
+    const name = [...retailers][0].toUpperCase();
+    return {
+      icon: "▣",
+      text: `All results are from ${name}.`,
+      hint: "Remove a retailer filter to compare options from other stores.",
+    };
+  }
+
+  return null;
+}
+
 export default function Results({ result, feedbackSent, onFeedback, onProductClick, onNewSearch }: Props) {
   const ranked            = result.recommendation?.ranked ?? [];
   const explanationPoints = result.recommendation?.explanationPoints ?? [];
   const allWarnings       = [...(result.warnings ?? []), ...(result.recommendation?.warnings ?? [])];
   const assumptions       = allWarnings.length > 0 ? allWarnings : DEFAULT_ASSUMPTIONS;
+  const notice            = buildNotice(result, ranked);
 
   const hasResults = ranked.length > 0 || (result.products?.length ?? 0) > 0;
 
@@ -91,18 +135,65 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
         <ResultSummary ranked={ranked} explanationPoints={explanationPoints} />
       )}
 
-      {/* Ranked store cards */}
-      {ranked.slice(0, 5).map((store, i) => (
+      {/* Top recommendation card */}
+      {ranked.length > 0 && (
         <StoreRecommendationCard
-          key={`${store.store.retailer}-${store.store.storeId}`}
-          store={store}
-          rank={i + 1}
-          explanationPoints={i === 0 ? explanationPoints : []}
+          key={`${ranked[0].store.retailer}-${ranked[0].store.storeId}`}
+          store={ranked[0]}
+          rank={1}
+          explanationPoints={explanationPoints}
         />
-      ))}
+      )}
+
+      {/* Answer — positioned to support the top recommendation context */}
+      {result.answer && (
+        <div className="answer-panel">
+          <AnswerMarkdown>{result.answer}</AnswerMarkdown>
+          <div className="feedback-bar">
+            {feedbackSent ? (
+              <span className="feedback-thanks">Thanks for the feedback</span>
+            ) : (
+              <>
+                <span className="feedback-label">Was this helpful?</span>
+                <button className="feedback-btn" onClick={() => onFeedback("thumbs_up")}>👍</button>
+                <button className="feedback-btn" onClick={() => onFeedback("thumbs_down")}>👎</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Alternative stores */}
+      {ranked.length > 1 && (
+        <>
+          <div className="results-section-divider">
+            <span className="results-section-label">Also consider</span>
+          </div>
+          {ranked.slice(1, 5).map((store, i) => (
+            <StoreRecommendationCard
+              key={`${store.store.retailer}-${store.store.storeId}`}
+              store={store}
+              rank={i + 2}
+              explanationPoints={[]}
+            />
+          ))}
+        </>
+      )}
 
       {/* Comparison table */}
       {ranked.length >= 2 && <ComparisonTable ranked={ranked} />}
+
+      {/* Contextual notice for partial/weak/single-retailer results */}
+      {notice && (
+        <div className="state-notice">
+          <span className="state-notice-icon" aria-hidden>{notice.icon}</span>
+          <div className="state-notice-body">
+            <span className="state-notice-text">{notice.text}</span>
+            {" "}
+            <span className="state-notice-hint">{notice.hint}</span>
+          </div>
+        </div>
+      )}
 
       {/* Assumptions */}
       <details className="assumptions-section">
@@ -123,25 +214,6 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       {/* Products */}
       {(result.products?.length ?? 0) > 0 && (
         <ProductSection products={result.products} onProductClick={onProductClick} />
-      )}
-
-      {/* Answer / explanation */}
-      {result.answer && (
-        <div className="answer-panel">
-          <span className="intent-badge">{result.intent?.type ?? "unknown"}</span>
-          <AnswerMarkdown>{result.answer}</AnswerMarkdown>
-          <div className="feedback-bar">
-            {feedbackSent ? (
-              <span className="feedback-thanks">Thanks for the feedback</span>
-            ) : (
-              <>
-                <span className="feedback-label">Was this helpful?</span>
-                <button className="feedback-btn" onClick={() => onFeedback("thumbs_up")}>👍</button>
-                <button className="feedback-btn" onClick={() => onFeedback("thumbs_down")}>👎</button>
-              </>
-            )}
-          </div>
-        </div>
       )}
 
       {/* Sources */}

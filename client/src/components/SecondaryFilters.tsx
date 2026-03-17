@@ -38,7 +38,7 @@ export default function SecondaryFilters({
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
       >
-        <span>Filters</span>
+        <span>Refine</span>
         <span className="filters-toggle-icon">{open ? "▲" : "▼"}</span>
       </button>
 

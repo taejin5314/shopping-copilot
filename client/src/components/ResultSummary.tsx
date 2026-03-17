@@ -46,8 +46,10 @@ export default function ResultSummary({ ranked, explanationPoints }: Props) {
   if (d) tags.push(d);
   if (s) tags.push(s);
   if (top.convenienceScore > 0.6) tags.push("Pickup today");
-  if (explanationPoints[0] && tags.length < 3) tags.push(explanationPoints[0]);
   const displayTags = tags.slice(0, 3);
+
+  // First explanation point shown as a dedicated "why" line, not as a tag
+  const whyText = explanationPoints[0] ?? null;
 
   const rest = ranked.slice(1);
   const closest  = rest.find(r => (r.distanceScore ?? 0) > (top.distanceScore ?? 0));
@@ -70,26 +72,32 @@ export default function ResultSummary({ ranked, explanationPoints }: Props) {
         </div>
       )}
 
-      <div className="result-summary-alts">
-        {showClosest && (
-          <div className="result-alt-pill">
-            <span className="alt-label">Closest</span>
-            <span className="alt-store">{storeLabel(closest!)}</span>
-          </div>
-        )}
-        {showCheapest && (
-          <div className="result-alt-pill">
-            <span className="alt-label">Best price</span>
-            <span className="alt-store">{storeLabel(cheapest!)}</span>
-          </div>
-        )}
-        {!showClosest && !showCheapest && runnerUp && (
-          <div className="result-alt-pill">
-            <span className="alt-label">Runner-up</span>
-            <span className="alt-store">{storeLabel(runnerUp)}</span>
-          </div>
-        )}
-      </div>
+      {whyText && (
+        <div className="result-summary-why">{whyText}</div>
+      )}
+
+      {(showClosest || showCheapest || runnerUp) && (
+        <div className="result-summary-alts">
+          {showClosest && (
+            <div className="result-alt-pill">
+              <span className="alt-label">Closest option</span>
+              <span className="alt-store">{storeLabel(closest!)}</span>
+            </div>
+          )}
+          {showCheapest && (
+            <div className="result-alt-pill">
+              <span className="alt-label">Best priced</span>
+              <span className="alt-store">{storeLabel(cheapest!)}</span>
+            </div>
+          )}
+          {!showClosest && !showCheapest && runnerUp && (
+            <div className="result-alt-pill">
+              <span className="alt-label">Runner-up</span>
+              <span className="alt-store">{storeLabel(runnerUp)}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
