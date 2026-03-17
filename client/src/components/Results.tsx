@@ -1,19 +1,27 @@
 import type { CopilotResponse, ProductInfo } from "../types";
-import DecisionSummary from "./DecisionSummary";
-import RecommendationCard from "./RecommendationCard";
+import ResultSummary from "./ResultSummary";
+import StoreRecommendationCard from "./StoreRecommendationCard";
 import ComparisonTable from "./ComparisonTable";
+import EmptyNoResults from "./EmptyNoResults";
 
 interface Props {
   result: CopilotResponse;
   feedbackSent: boolean;
   onFeedback: (v: "thumbs_up" | "thumbs_down") => void;
   onProductClick: (itemNo: string, rank: number, retailer: string) => void;
+  onNewSearch: () => void;
 }
 
 function pct(n: number | null | undefined): string {
   if (n == null) return "—";
   return Math.round(n * 100) + "%";
 }
+
+const DEFAULT_ASSUMPTIONS = [
+  "Availability may change quickly — verify with the store before visiting.",
+  "Distance is estimated from your current area and may vary.",
+  "Some retailers may not expose live stock for every location.",
+];
 
 function ProductSection({
   products,
@@ -30,9 +38,9 @@ function ProductSection({
         <span className="section-count">{products.length} found</span>
       </div>
       {products.map((p, i) => {
-        const variant  = [p.designText, p.measureText].filter(Boolean).join(" · ");
-        const price    = p.price ? `${p.price.currency} ${p.price.amount}` : null;
-        const Tag      = p.url ? "a" : "div";
+        const variant   = [p.designText, p.measureText].filter(Boolean).join(" · ");
+        const price     = p.price ? `${p.price.currency} ${p.price.amount}` : null;
+        const Tag       = p.url ? "a" : "div";
         const linkProps = p.url ? { href: p.url, target: "_blank", rel: "noopener noreferrer" } : {};
         return (
           <Tag
@@ -41,18 +49,17 @@ function ProductSection({
             {...linkProps}
             onClick={() => onProductClick(p.itemNo, i, p.retailer)}
           >
-            {p.imageUrl ? (
-              <img className="product-img" src={p.imageUrl} alt={p.name} loading="lazy" />
-            ) : (
-              <div className="product-img-placeholder">{p.retailer.slice(0, 1).toUpperCase()}</div>
-            )}
+            {p.imageUrl
+              ? <img className="product-img" src={p.imageUrl} alt={p.name} loading="lazy" />
+              : <div className="product-img-placeholder">{p.retailer.slice(0,1).toUpperCase()}</div>
+            }
             <div className="product-info">
               <div className="product-name">{p.name}</div>
               {variant && <div className="product-variant">{variant}</div>}
               <div className="product-meta">{p.retailer} · {p.itemNo}</div>
             </div>
             {price && <div className="product-price">{price}</div>}
-            {p.url && <span className="product-link-arrow">↗</span>}
+            {p.url  && <span className="product-link-arrow">↗</span>}
           </Tag>
         );
       })}
@@ -60,43 +67,43 @@ function ProductSection({
   );
 }
 
-const DEFAULT_ASSUMPTIONS = [
-  "Availability may change quickly — verify with the store before visiting.",
-  "Distance is estimated from your current area and may vary.",
-  "Some retailers may not expose live stock for every store location.",
-];
-
-export default function Results({ result, feedbackSent, onFeedback, onProductClick }: Props) {
-  const ranked           = result.recommendation?.ranked ?? [];
+export default function Results({ result, feedbackSent, onFeedback, onProductClick, onNewSearch }: Props) {
+  const ranked            = result.recommendation?.ranked ?? [];
   const explanationPoints = result.recommendation?.explanationPoints ?? [];
-  const allWarnings      = [...(result.warnings ?? []), ...(result.recommendation?.warnings ?? [])];
-  const assumptions      = allWarnings.length > 0 ? allWarnings : DEFAULT_ASSUMPTIONS;
+  const allWarnings       = [...(result.warnings ?? []), ...(result.recommendation?.warnings ?? [])];
+  const assumptions       = allWarnings.length > 0 ? allWarnings : DEFAULT_ASSUMPTIONS;
+
+  const hasResults = ranked.length > 0 || (result.products?.length ?? 0) > 0;
+
+  if (!hasResults) {
+    return (
+      <div className="results-body">
+        <EmptyNoResults onRetry={onNewSearch} />
+      </div>
+    );
+  }
 
   return (
     <div className="results-body">
-      {/* Decision summary */}
+      {/* Top recommendation banner */}
       {ranked.length > 0 && (
-        <DecisionSummary ranked={ranked} explanationPoints={explanationPoints} />
+        <ResultSummary ranked={ranked} explanationPoints={explanationPoints} />
       )}
 
-      {/* Ranked cards */}
-      {ranked.length > 0 && (
-        <div className="rec-cards-section">
-          {ranked.slice(0, 5).map((store, i) => (
-            <RecommendationCard
-              key={`${store.store.retailer}-${store.store.storeId}`}
-              store={store}
-              rank={i + 1}
-              explanationPoints={i === 0 ? explanationPoints : []}
-            />
-          ))}
-        </div>
-      )}
+      {/* Ranked store cards */}
+      {ranked.slice(0, 5).map((store, i) => (
+        <StoreRecommendationCard
+          key={`${store.store.retailer}-${store.store.storeId}`}
+          store={store}
+          rank={i + 1}
+          explanationPoints={i === 0 ? explanationPoints : []}
+        />
+      ))}
 
       {/* Comparison table */}
       {ranked.length >= 2 && <ComparisonTable ranked={ranked} />}
 
-      {/* Assumptions accordion */}
+      {/* Assumptions */}
       <details className="assumptions-section">
         <summary>
           Availability &amp; assumptions
@@ -113,11 +120,11 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       </details>
 
       {/* Products */}
-      {result.products?.length > 0 && (
+      {(result.products?.length ?? 0) > 0 && (
         <ProductSection products={result.products} onProductClick={onProductClick} />
       )}
 
-      {/* Answer */}
+      {/* Answer / explanation */}
       {result.answer && (
         <div className="answer-panel">
           <span className="intent-badge">{result.intent?.type ?? "unknown"}</span>
@@ -137,7 +144,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       )}
 
       {/* Sources */}
-      {result.citations?.length > 0 && (
+      {(result.citations?.length ?? 0) > 0 && (
         <details className="collapsible">
           <summary>
             Sources ({result.citations.length})
@@ -158,7 +165,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       )}
 
       {/* Policy knowledge */}
-      {result.retrievedKnowledge?.length > 0 && (
+      {(result.retrievedKnowledge?.length ?? 0) > 0 && (
         <details className="collapsible">
           <summary>
             Policy information ({result.retrievedKnowledge.length})
@@ -179,7 +186,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       )}
 
       {/* Tool calls */}
-      {result.toolCallsUsed?.length > 0 && (
+      {(result.toolCallsUsed?.length ?? 0) > 0 && (
         <details className="collapsible">
           <summary>
             Tool calls ({result.toolCallsUsed.length})
@@ -191,7 +198,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
                 <span className="tool-name">{t.tool}</span>
                 <span className={t.success ? "tool-ok" : "tool-fail"}>{t.success ? "✓" : "✗"}</span>
                 <span className="tool-ms">{t.durationMs}ms</span>
-                <span style={{ color: "var(--text-4)", fontSize: "0.7rem" }}>[{t.retailer}]</span>
+                <span style={{ color: "var(--text-muted)", fontSize: ".68rem" }}>[{t.retailer}]</span>
               </div>
             ))}
           </div>

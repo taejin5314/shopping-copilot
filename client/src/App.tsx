@@ -4,6 +4,7 @@ import SearchShell from "./components/SearchShell";
 import Results from "./components/Results";
 import EmptyState from "./components/EmptyState";
 import LoadingSteps from "./components/LoadingSteps";
+import ErrorRetry from "./components/ErrorRetry";
 
 // ── Session ID ──
 const SESSION_ID = crypto.randomUUID();
@@ -37,12 +38,12 @@ function useGeolocation() {
 // ── App ──
 export default function App() {
   const { geo, retry: retryGeo } = useGeolocation();
-  const [query, setQuery] = useState("");
+  const [query, setQuery]       = useState("");
   const [retailer, setRetailer] = useState("");
   const [radiusKm, setRadiusKm] = useState<number | null>(25);
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [result, setResult] = useState<CopilotResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus]     = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [result, setResult]     = useState<CopilotResponse | null>(null);
+  const [error, setError]       = useState<string | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const lastQueryRef = useRef("");
 
@@ -102,7 +103,7 @@ export default function App() {
     setError(null);
   };
 
-  // ── Home page ──
+  // ── Home ──
   if (status === "idle") {
     return (
       <EmptyState
@@ -112,11 +113,16 @@ export default function App() {
         loading={false}
         onExample={handleExampleClick}
         geo={geo}
+        onRetryGeo={retryGeo}
+        retailer={retailer}
+        onRetailerChange={setRetailer}
+        radiusKm={radiusKm}
+        onRadiusChange={setRadiusKm}
       />
     );
   }
 
-  // ── Results / loading page ──
+  // ── Results / loading / error ──
   return (
     <div className="results-page">
       <SearchShell
@@ -135,8 +141,8 @@ export default function App() {
 
       {status === "loading" && <LoadingSteps />}
 
-      {status === "error" && error && (
-        <div className="error-box">{error}</div>
+      {status === "error" && (
+        <ErrorRetry message={error} onRetry={() => submit()} />
       )}
 
       {status === "done" && result && (
@@ -145,6 +151,7 @@ export default function App() {
           feedbackSent={feedbackSent}
           onFeedback={handleFeedback}
           onProductClick={handleProductClick}
+          onNewSearch={handleLogoClick}
         />
       )}
     </div>
