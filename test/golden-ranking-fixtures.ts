@@ -407,6 +407,27 @@ const NYC_DISTANCE_ORDER: GoldenScenario = {
   expectedOrder: ["154", "158", "411", "145", "042"],
 };
 
+/**
+ * Scenario 14 [live:live-002]: Stock coverage beats proximity (NYC).
+ * 2-item cart: MORABO sofa (89318321) + KALLAX (20275885).
+ * 921 (Brooklyn) is the CLOSEST store but has MORABO qty=0 → coverage=0.5.
+ * 154 (Elizabeth NJ) and 409 (Paramus NJ) both have full coverage=1.0 and
+ * rank above 921 despite being farther. Within the 1.0 group, distance decides.
+ * Extracted from ci/live-002.json. Scoring engine verified.
+ */
+const NYC_STOCK_BEATS_PROXIMITY: GoldenScenario = {
+  name: "nyc-stock-beats-proximity",
+  source: "live:live-002",
+  stores: [
+    makeStock("409", [{ itemNo: "89318321", quantity: 4 }, { itemNo: "20275885", quantity: 21 }], { lat: 40.9291, lng: -74.0760 }), // Paramus, NJ
+    makeStock("154", [{ itemNo: "89318321", quantity: 3 }, { itemNo: "20275885", quantity: 15 }], { lat: 40.6780, lng: -74.1709 }), // Elizabeth, NJ
+    makeStock("921", [{ itemNo: "89318321", quantity: 0 }, { itemNo: "20275885", quantity: 18 }], { lat: 40.6729, lng: -73.9961 }), // Brooklyn, NY — MORABO out of stock
+  ],
+  cart: [{ itemNo: "89318321", quantity: 1 }, { itemNo: "20275885", quantity: 1 }],
+  ctx: { userLocation: USER_NYC },
+  expectedOrder: ["154", "409", "921"],
+};
+
 // ── Export ──
 
 export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
@@ -423,6 +444,7 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   QUANTITY_THRESHOLD_MULTI_ITEM_GRADIENT,
   REAL_STOCK_BEATS_UNKNOWN,
   NYC_DISTANCE_ORDER,
+  NYC_STOCK_BEATS_PROXIMITY,
 ];
 
 // ── Log extraction ──
