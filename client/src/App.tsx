@@ -3,9 +3,9 @@ import type { CopilotResponse, QueryRequest } from "./types";
 import SearchShell from "./components/SearchShell";
 import Results from "./components/Results";
 import EmptyState from "./components/EmptyState";
-import Skeleton from "./components/Skeleton";
+import LoadingSteps from "./components/LoadingSteps";
 
-// ── Session ID for event tracking ──
+// ── Session ID ──
 const SESSION_ID = crypto.randomUUID();
 
 function trackEvent(eventType: string, extra: Record<string, unknown> = {}) {
@@ -38,7 +38,7 @@ function useGeolocation() {
 export default function App() {
   const { geo, retry: retryGeo } = useGeolocation();
   const [query, setQuery] = useState("");
-  const [retailer, setRetailer] = useState("");        // "" = auto
+  const [retailer, setRetailer] = useState("");
   const [radiusKm, setRadiusKm] = useState<number | null>(25);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [result, setResult] = useState<CopilotResponse | null>(null);
@@ -96,46 +96,49 @@ export default function App() {
     trackEvent("product_clicked", { item_no: itemNo, item_rank: rank, retailer: r, query_text: lastQueryRef.current });
   };
 
-  return (
-    <div className="page">
-      {/* Header */}
-      <header className="header">
-        <div className="brand">Shopilot</div>
-        <div className="tagline">Find the best nearby store before you go</div>
-        <div className="retailer-badges">
-          <span className="retailer-badge">IKEA</span>
-          <span className="retailer-badge">Structube</span>
-        </div>
-      </header>
+  const handleLogoClick = () => {
+    setStatus("idle");
+    setResult(null);
+    setError(null);
+  };
 
-      {/* Search */}
-      <SearchShell
-        geo={geo}
-        onRetryGeo={retryGeo}
+  // ── Home page ──
+  if (status === "idle") {
+    return (
+      <EmptyState
         query={query}
         onQueryChange={setQuery}
+        onSubmit={() => submit()}
+        loading={false}
+        onExample={handleExampleClick}
+        geo={geo}
+      />
+    );
+  }
+
+  // ── Results / loading page ──
+  return (
+    <div className="results-page">
+      <SearchShell
+        query={query}
+        onQueryChange={setQuery}
+        onSubmit={() => submit()}
+        loading={status === "loading"}
+        geo={geo}
+        onRetryGeo={retryGeo}
         retailer={retailer}
         onRetailerChange={setRetailer}
         radiusKm={radiusKm}
         onRadiusChange={setRadiusKm}
-        loading={status === "loading"}
-        onSubmit={() => submit()}
+        onLogoClick={handleLogoClick}
       />
 
-      {/* Error */}
+      {status === "loading" && <LoadingSteps />}
+
       {status === "error" && error && (
         <div className="error-box">{error}</div>
       )}
 
-      {/* Loading */}
-      {status === "loading" && <Skeleton />}
-
-      {/* Empty state */}
-      {status === "idle" && (
-        <EmptyState onExample={handleExampleClick} />
-      )}
-
-      {/* Results */}
       {status === "done" && result && (
         <Results
           result={result}
