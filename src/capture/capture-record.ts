@@ -24,6 +24,10 @@ export interface RankingSnapshot {
   cart: Array<{ itemNo: string; quantity: number }>;
   /** storeIds in final rank order (highest score first). */
   rankedIds: string[];
+  /** Geocoded user location at request time. Present only when the user
+   * supplied a location that was resolved. Required to reproduce
+   * distance-driven rankings offline. */
+  userLocation?: { lat: number; lng: number };
 }
 
 export interface CaptureRecord {

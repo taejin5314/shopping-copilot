@@ -425,7 +425,7 @@ export function scenarioFromCapture(record: CaptureRecord, name?: string): Golde
     source: `log:${record.id ?? "captured"}`,
     stores: snap.stores,
     cart: snap.cart,
-    ctx: undefined, // user location is not persisted in CaptureRecord
+    ctx: snap.userLocation ? { userLocation: snap.userLocation } : undefined,
     expectedOrder: snap.rankedIds,
   };
 }

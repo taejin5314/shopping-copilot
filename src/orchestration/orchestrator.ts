@@ -177,6 +177,7 @@ export async function handleQuery(
               stores: storeStocks,
               cart,
               rankedIds: ranked.map((s) => s.store.storeId),
+              ...(context?.location && { userLocation: context.location }),
             };
             if (!context?.location) {
               warnings.push("No user location provided — distance scoring and radius filtering were not applied.");
@@ -362,6 +363,7 @@ export async function handleQuery(
             stores: filteredStocks,
             cart: topCart,
             rankedIds: ranked.map((s) => s.store.storeId),
+            ...(context?.location && { userLocation: context.location }),
           };
           const allStockUnknown = storeStocks.every((ss) =>
             ss.items.every((item) => item.stockLevel === "UNKNOWN"),

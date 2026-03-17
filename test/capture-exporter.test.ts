@@ -566,4 +566,18 @@ describe("buildCaptureRecord — rankingSnapshot", () => {
     });
     assert.deepEqual(record.rankingSnapshot?.rankedIds, ["B", "A"]);
   });
+
+  it("userLocation is preserved in rankingSnapshot", () => {
+    const loc = { lat: 34.05, lng: -118.24 };
+    const record = buildCaptureRecord({
+      query: "shelf",
+      rankingSnapshot: { ...snap, userLocation: loc },
+    });
+    assert.deepEqual(record.rankingSnapshot?.userLocation, loc);
+  });
+
+  it("userLocation is absent when not set in rankingSnapshot", () => {
+    const record = buildCaptureRecord({ query: "shelf", rankingSnapshot: snap });
+    assert.equal(record.rankingSnapshot?.userLocation, undefined);
+  });
 });
