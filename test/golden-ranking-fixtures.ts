@@ -42,6 +42,9 @@ export interface GoldenScenario {
 /** Reference user location: downtown Vancouver. */
 export const USER_VANCOUVER = { lat: 49.24, lng: -123.12 };
 
+/** Reference user location: Midtown Manhattan, NYC. */
+export const USER_NYC = { lat: 40.71, lng: -73.96 };
+
 export function makeStock(
   storeId: string,
   items: Array<{ itemNo: string; quantity: number | null; stockLevel?: string }>,
@@ -382,6 +385,28 @@ const REAL_STOCK_BEATS_UNKNOWN: GoldenScenario = {
   expectedOrder: ["real-stock", "unknown-stock"],
 };
 
+/**
+ * Scenario 13 [live:live-001]: Distance-only ranking from NYC.
+ * All 5 US stores fully stocked with BILLY (20522046) — ranking is purely by
+ * haversine distance from Midtown Manhattan. Extracted from a live capture
+ * that persists userLocation (ci/live-001.json).
+ * Expected: NJ (closest) > MA > MD > FL×2 (farthest).
+ */
+const NYC_DISTANCE_ORDER: GoldenScenario = {
+  name: "nyc-distance-order",
+  source: "live:live-001",
+  stores: [
+    makeStock("154", [{ itemNo: "20522046", quantity: 141 }], { lat: 40.678,  lng: -74.1709 }), // Elizabeth, NJ
+    makeStock("158", [{ itemNo: "20522046", quantity: 237 }], { lat: 42.1145, lng: -71.0904 }), // Stoughton, MA
+    makeStock("411", [{ itemNo: "20522046", quantity: 168 }], { lat: 38.9953, lng: -76.9137 }), // College Park, MD
+    makeStock("145", [{ itemNo: "20522046", quantity: 189 }], { lat: 28.3884, lng: -81.4239 }), // Orlando, FL
+    makeStock("042", [{ itemNo: "20522046", quantity: 159 }], { lat: 27.9614, lng: -82.4931 }), // Tampa, FL
+  ],
+  cart: [{ itemNo: "20522046", quantity: 1 }],
+  ctx: { userLocation: USER_NYC },
+  expectedOrder: ["154", "158", "411", "145", "042"],
+};
+
 // ── Export ──
 
 export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
@@ -397,6 +422,7 @@ export const ALL_GOLDEN_SCENARIOS: GoldenScenario[] = [
   COVERAGE_GRADIENT_THREE_STORES,
   QUANTITY_THRESHOLD_MULTI_ITEM_GRADIENT,
   REAL_STOCK_BEATS_UNKNOWN,
+  NYC_DISTANCE_ORDER,
 ];
 
 // ── Log extraction ──
