@@ -9,7 +9,6 @@ env:
   REGION: us-central1
   SERVICE: shopilot
   REGISTRY: us-central1-docker.pkg.dev
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ── GCP 사전 설정 (최초 1회) ─────────────────────────────────────────────────
 #
@@ -40,6 +39,8 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: read
       id-token: write   # Workload Identity Federation 필요
