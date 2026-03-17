@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RankedStore } from "../types";
+import type { ProductInfo, RankedStore } from "../types";
 
 /** "149 (North York, ON, CA)" → "IKEA North York", otherwise returns label as-is. */
 function formatStoreName(label: string, retailer: string): string {
@@ -29,9 +29,10 @@ function stockInfo(s: RankedStore): { label: string; cls: string } {
   if (total === 1) {
     const d = s.itemDetails[0];
     const label = d.available != null
-      ? `${d.available} in stock`
+      ? (d.available > 0 ? `${d.available} in stock` : "Out of stock")
       : d.sufficient ? "In stock" : "Out of stock";
-    return { label, cls: d.sufficient ? "val-ok" : "val-partial" };
+    const cls = d.sufficient ? "val-ok" : (d.available === 0 ? "val-none" : "val-partial");
+    return { label, cls };
   }
   // Multiple items: show coverage count
   return {
@@ -57,9 +58,11 @@ interface Props {
   store: RankedStore;
   rank: number;
   explanationPoints: string[];
+  products?: ProductInfo[];
 }
 
-export default function StoreRecommendationCard({ store, rank, explanationPoints }: Props) {
+export default function StoreRecommendationCard({ store, rank, explanationPoints, products }: Props) {
+  const nameMap = new Map(products?.map(p => [p.itemNo, p.name]) ?? []);
   const [expanded, setExpanded] = useState(false);
   const d = approxDist(store);
   const { label: sl, cls: stockCls } = stockInfo(store);
@@ -132,9 +135,11 @@ export default function StoreRecommendationCard({ store, rank, explanationPoints
         <div className="store-item-details">
           {store.itemDetails.map(d => (
             <div key={d.itemNo} className="store-item-row">
-              <span className="store-item-no">{d.itemNo}</span>
-              <span className={`store-item-stock ${d.sufficient ? "val-ok" : "val-partial"}`}>
-                {d.available != null ? `${d.available} in stock` : "Unknown"}
+              <span className="store-item-no">{nameMap.get(d.itemNo) ?? d.itemNo}</span>
+              <span className={`store-item-stock ${d.sufficient ? "val-ok" : d.available === 0 ? "val-none" : "val-partial"}`}>
+                {d.available != null
+                  ? (d.available > 0 ? `${d.available} in stock` : "Out of stock")
+                  : d.sufficient ? "In stock" : "Unknown"}
               </span>
               <span className="store-item-needed">need {d.requested}</span>
             </div>

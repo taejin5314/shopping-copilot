@@ -25,7 +25,7 @@ function stockTag(s: RankedStore): string {
   const n = s.itemDetails.filter(d => d.sufficient).length;
   if (total === 1) {
     const d = s.itemDetails[0];
-    if (d.available != null) return `${d.available} in stock`;
+    if (d.available != null) return d.available > 0 ? `${d.available} in stock` : "";
     return n === 1 ? "Full stock" : "";
   }
   return n === total ? "Full stock" : `${n}/${total} items`;

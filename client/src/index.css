@@ -879,6 +879,8 @@ img    { display: block; max-width: 100%; }
 }
 .store-stat-value.val-ok      { color: var(--success); }
 .store-stat-value.val-partial { color: var(--warn-text); }
+.store-stat-value.val-none    { color: var(--text-muted); }
+.store-item-stock.val-none    { color: var(--text-muted); }
 
 .store-card-why {
   padding-top: 14px;

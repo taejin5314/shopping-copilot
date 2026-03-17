@@ -142,6 +142,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
           store={ranked[0]}
           rank={1}
           explanationPoints={explanationPoints}
+          products={result.products ?? []}
         />
       )}
 
@@ -175,6 +176,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
               store={store}
               rank={i + 2}
               explanationPoints={[]}
+              products={result.products ?? []}
             />
           ))}
         </>
