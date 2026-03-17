@@ -3,6 +3,7 @@ import ResultSummary from "./ResultSummary";
 import StoreRecommendationCard from "./StoreRecommendationCard";
 import ComparisonTable from "./ComparisonTable";
 import EmptyNoResults from "./EmptyNoResults";
+import AnswerMarkdown from "./AnswerMarkdown";
 
 interface Props {
   result: CopilotResponse;
@@ -128,7 +129,7 @@ export default function Results({ result, feedbackSent, onFeedback, onProductCli
       {result.answer && (
         <div className="answer-panel">
           <span className="intent-badge">{result.intent?.type ?? "unknown"}</span>
-          <p className="answer-text">{result.answer}</p>
+          <AnswerMarkdown>{result.answer}</AnswerMarkdown>
           <div className="feedback-bar">
             {feedbackSent ? (
               <span className="feedback-thanks">Thanks for the feedback</span>
