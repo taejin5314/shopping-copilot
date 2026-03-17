@@ -1,8 +1,16 @@
 import { useState } from "react";
 import type { RankedStore } from "../types";
 
+/** "149 (North York, ON, CA)" → "IKEA North York", otherwise returns label as-is. */
+function formatStoreName(label: string, retailer: string): string {
+  const m = label.match(/^\d+\s*\(([^,]+)/);
+  if (m) return `${retailer.toUpperCase()} ${m[1].trim()}`;
+  return label;
+}
+
 function storeLabel(s: RankedStore): string {
-  return s.store.label ?? s.store.storeId;
+  const raw = s.store.label ?? s.store.storeId;
+  return formatStoreName(raw, s.store.retailer);
 }
 
 function pct(n: number | null | undefined): string {
@@ -20,8 +28,17 @@ function stockInfo(s: RankedStore): { label: string; cls: string } {
   const total = s.itemDetails.length;
   if (total === 0) return { label: "—", cls: "" };
   const n = s.itemDetails.filter(d => d.sufficient).length;
+  // Single item: show actual quantity ("8 in stock"), not coverage ratio
+  if (total === 1) {
+    const d = s.itemDetails[0];
+    const label = d.available != null
+      ? `${d.available} in stock`
+      : d.sufficient ? "In stock" : "Out of stock";
+    return { label, cls: d.sufficient ? "val-ok" : "val-partial" };
+  }
+  // Multiple items: show coverage count
   return {
-    label: `${n}/${total} in stock`,
+    label: `${n}/${total} items`,
     cls: n === total ? "val-ok" : "val-partial",
   };
 }

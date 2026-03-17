@@ -1,7 +1,14 @@
 import type { RankedStore } from "../types";
 
+function formatStoreName(label: string, retailer: string): string {
+  const m = label.match(/^\d+\s*\(([^,]+)/);
+  if (m) return `${retailer.toUpperCase()} ${m[1].trim()}`;
+  return label;
+}
+
 function storeLabel(s: RankedStore): string {
-  return s.store.label ?? s.store.storeId;
+  const raw = s.store.label ?? s.store.storeId;
+  return formatStoreName(raw, s.store.retailer);
 }
 
 function approxDist(s: RankedStore): string | null {
@@ -14,7 +21,12 @@ function stockTag(s: RankedStore): string {
   const total = s.itemDetails.length;
   if (total === 0) return "";
   const n = s.itemDetails.filter(d => d.sufficient).length;
-  return n === total ? "Full stock" : `${n}/${total} in stock`;
+  if (total === 1) {
+    const d = s.itemDetails[0];
+    if (d.available != null) return `${d.available} in stock`;
+    return n === 1 ? "Full stock" : "";
+  }
+  return n === total ? "Full stock" : `${n}/${total} items`;
 }
 
 interface Props {

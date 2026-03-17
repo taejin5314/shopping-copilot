@@ -29,7 +29,12 @@ export default function EmptyState({
     <div className="home-page">
       <nav className="home-nav">
         <div className="nav-logo">Shopilot</div>
-        <a href="#how-it-works" className="nav-how-link">How it works</a>
+        <button
+          className="nav-how-link"
+          onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
+        >
+          How it works
+        </button>
       </nav>
 
       <main className="home-main">

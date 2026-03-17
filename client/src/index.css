@@ -410,6 +410,7 @@ img    { display: block; max-width: 100%; }
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding: 64px 24px;
+  scroll-margin-top: 56px;
 }
 .how-inner {
   max-width: var(--max-home);
