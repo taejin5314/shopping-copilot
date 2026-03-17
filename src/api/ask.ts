@@ -189,6 +189,7 @@ async function queryAll(
         llmProvider: config.llmProvider,
         maxStoreResults: config.maxStoreResults,
         maxProductResults: config.maxProductResults,
+        captureExporter: config.captureExporter,
       }, context).catch((err) => {
         console.error(`[ask] ${retailerId} failed:`, err);
         return null;

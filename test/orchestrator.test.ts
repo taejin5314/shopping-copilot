@@ -527,6 +527,33 @@ describe("orchestrator — explanation in Route B response", () => {
   });
 });
 
+describe("orchestrator — captureExporter is called after each request", () => {
+  it("exporter receives one CaptureRecord per handleQuery call", async () => {
+    const captured: unknown[] = [];
+    const exporter = (record: unknown) => { captured.push(record); };
+
+    const resp = await handleQuery("sofa", {
+      ...baseConfig([makeProduct({ itemNo: "P1", name: "SÖDERHAMN Sofa" })]),
+      captureExporter: exporter,
+    });
+
+    // Request completed successfully
+    assert.ok(resp.answer);
+    // Exactly one record was captured
+    assert.equal(captured.length, 1);
+    // Record has expected shape
+    const rec = captured[0] as Record<string, unknown>;
+    assert.equal(typeof rec["query"], "string");
+    assert.equal(typeof rec["timestamp"], "string");
+  });
+
+  it("exporter is not called when captureExporter is absent", async () => {
+    // No exporter — should complete without throwing
+    const resp = await handleQuery("sofa", baseConfig([]));
+    assert.ok(typeof resp.answer === "string");
+  });
+});
+
 describe("orchestrator — explanation absent when no products found", () => {
   it("explanation is undefined when adapter returns nothing", async () => {
     const resp = await handleQuery("sofa", baseConfig([]));
