@@ -88,6 +88,8 @@ export interface ScoredStore {
   convenienceScore: number;
   /** 0–1; placeholder for distance-based scoring. */
   distanceScore: number | null;
+  /** Raw distance in km — used for user-facing display. Null when location is unavailable. */
+  distanceKm: number | null;
   /** 0–1; placeholder for price-based scoring. */
   priceScore: number | null;
   /** Weighted composite. */

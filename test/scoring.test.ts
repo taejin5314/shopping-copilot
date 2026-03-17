@@ -148,7 +148,7 @@ describe("buildRecommendation", () => {
     const cart = [{ itemNo: "001", quantity: 1 }];
     const ranked = rankStores(stores, cart);
     const rec = buildRecommendation(ranked, cart);
-    assert.ok(rec.explanationPoints.some((p) => p.includes("all 1 item")));
+    assert.ok(rec.explanationPoints.includes("In stock"));
     assert.equal(rec.warnings.length, 0);
   });
 

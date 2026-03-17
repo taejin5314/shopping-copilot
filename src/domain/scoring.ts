@@ -79,9 +79,10 @@ export function scoreStore(
 
   // Distance scoring: requires both user location and store coordinates
   let distanceScore: number | null = null;
+  let distanceKm: number | null = null;
   if (ctx?.userLocation && storeStock.store.coords) {
-    const km = haversineKm(ctx.userLocation, storeStock.store.coords);
-    distanceScore = distanceToScore(km);
+    distanceKm = haversineKm(ctx.userLocation, storeStock.store.coords);
+    distanceScore = distanceToScore(distanceKm);
   }
 
   const priceScore: number | null = null; // placeholder
@@ -97,6 +98,7 @@ export function scoreStore(
     stockCoverageScore,
     convenienceScore,
     distanceScore,
+    distanceKm,
     priceScore,
     totalScore,
     itemDetails,
@@ -190,48 +192,62 @@ export function buildRecommendation(
   }
 
   const best = top[0];
-
-  // Explain the top pick
   const fulfilledCount = best.itemDetails.filter((d) => d.sufficient).length;
   const totalItems = cart.length;
+  const isSingleItem = totalItems === 1;
+  const isFullMatch = fulfilledCount === totalItems;
+  const hasDistance = best.distanceKm !== null;
 
-  if (fulfilledCount === totalItems) {
-    explanationPoints.push(
-      `${best.store.label} has all ${totalItems} item(s) in sufficient quantity.`,
-    );
+  // Point 1: stock coverage (always present)
+  if (isSingleItem) {
+    explanationPoints.push("In stock");
+  } else if (isFullMatch) {
+    explanationPoints.push(`All ${totalItems} items in stock`);
   } else {
-    explanationPoints.push(
-      `${best.store.label} has ${fulfilledCount} of ${totalItems} item(s) in sufficient quantity.`,
-    );
+    explanationPoints.push(`${fulfilledCount} of ${totalItems} items in stock`);
   }
 
-  explanationPoints.push(
-    `Stock coverage score: ${(best.stockCoverageScore * 100).toFixed(0)}%`,
-  );
-
-  if (best.distanceScore !== null) {
-    explanationPoints.push(
-      `Distance score: ${(best.distanceScore * 100).toFixed(0)}%`,
-    );
+  // Points 2–3: quantity and/or distance qualifier
+  if (isSingleItem) {
+    const detail = best.itemDetails[0];
+    if (hasDistance) {
+      const isClosest = top.every((s) => (s.distanceKm ?? Infinity) >= best.distanceKm!);
+      if (isClosest) {
+        // Concise two-point form — skip raw quantity
+        explanationPoints.push("Closest available option");
+      } else {
+        if (detail.available !== null && detail.available > 1) {
+          explanationPoints.push(`${detail.available} units available`);
+        }
+        explanationPoints.push(`About ${Math.round(best.distanceKm!)} km away`);
+      }
+    } else {
+      // No distance — show quantity if useful
+      if (detail.available !== null && detail.available > 1) {
+        explanationPoints.push(`${detail.available} units available`);
+      }
+    }
+  } else {
+    // Multi-item cart
+    if (hasDistance) {
+      explanationPoints.push(
+        isFullMatch ? "Best nearby full-match option" : "Good nearby option",
+      );
+    } else if (isFullMatch) {
+      explanationPoints.push("Strong stock match");
+    }
+    // Partial match with no distance: only the stock coverage point is shown
   }
 
-  if (best.priceScore !== null) {
-    explanationPoints.push(
-      `Price score: ${(best.priceScore * 100).toFixed(0)}%`,
-    );
-  }
-
-  // Warn about missing items
+  // Warn about items missing at the top store
   const missingItems = best.itemDetails.filter((d) => !d.sufficient);
   if (missingItems.length > 0) {
     const missingNos = missingItems.map((d) => d.itemNo).join(", ");
-    warnings.push(`Item(s) ${missingNos} not available in sufficient quantity at the top-ranked store.`);
+    warnings.push(`Item(s) ${missingNos} not available in sufficient quantity at the top store.`);
   }
 
   // Warn if no store covers the full cart
-  const anyFullCoverage = top.some(
-    (s) => s.itemDetails.every((d) => d.sufficient),
-  );
+  const anyFullCoverage = top.some((s) => s.itemDetails.every((d) => d.sufficient));
   if (!anyFullCoverage) {
     warnings.push("No single store has all items in sufficient quantity. Consider splitting across stores.");
   }

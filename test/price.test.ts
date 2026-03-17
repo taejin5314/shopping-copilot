@@ -242,7 +242,7 @@ describe("price scoring — mixed signals", () => {
 // ── Price in buildRecommendation ──
 
 describe("buildRecommendation with price", () => {
-  it("includes price score in explanation when set", () => {
+  it("generates user-friendly explanation points when price is a factor", () => {
     const cart = [{ itemNo: "001", quantity: 1 }];
     const stores = [
       makeStoreStock("cheap", "test", [{ itemNo: "001", quantity: 5 }]),
@@ -253,7 +253,12 @@ describe("buildRecommendation with price", () => {
     };
     const ranked = rankStores(stores, cart, BALANCED_WEIGHTS, ctx);
     const rec = buildRecommendation(ranked, cart);
-    assert.ok(rec.explanationPoints.some((p) => p.includes("Price score")));
+    // No internal scoring language exposed
+    assert.ok(!rec.explanationPoints.some((p) => p.toLowerCase().includes("price score")));
+    assert.ok(!rec.explanationPoints.some((p) => p.toLowerCase().includes("distance score")));
+    assert.ok(!rec.explanationPoints.some((p) => p.toLowerCase().includes("stock coverage score")));
+    // User-friendly stock point is present
+    assert.ok(rec.explanationPoints.includes("In stock"));
   });
 
   it("omits price score from explanation when null", () => {

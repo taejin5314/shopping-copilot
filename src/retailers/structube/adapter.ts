@@ -275,8 +275,14 @@ function buildStoreStock(
       // Structube exposes status ("IN_STOCK"/"OUT_OF_STOCK") but often omits exact quantity.
       // quantity >= requested would evaluate null >= 1 = false, hiding in-stock items.
       // Use status as the primary signal; show quantity only when positive.
+      // OUT_OF_STOCK with quantity=0 must surface 0 (not null) so callers can distinguish
+      // "known zero" from "quantity unknown" (UNKNOWN status → null).
       const inStock = inv?.status === "IN_STOCK";
-      const qty = (inv?.quantity != null && inv.quantity > 0) ? inv.quantity : null;
+      const qty = inv == null
+        ? null
+        : inv.quantity > 0
+          ? inv.quantity
+          : inv.status === "OUT_OF_STOCK" ? 0 : null;
       const available = inv !== undefined ? (qty !== null ? qty >= requested : inStock) : false;
       return {
         itemNo: sku,
