@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf 
 WORKDIR /app
 COPY --from=build /app/dist dist/
 COPY --from=build /app/node_modules node_modules/
+COPY --from=build /app/public public/
 COPY package.json ./
-COPY public/ public/
 COPY start.sh ./
 RUN chmod +x start.sh
 
