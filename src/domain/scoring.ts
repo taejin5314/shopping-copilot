@@ -182,13 +182,22 @@ export function buildRecommendation(
   cart: CartItem[],
   maxResults: number = 3,
 ): RecommendationResult {
-  const top = ranked.slice(0, maxResults);
   const explanationPoints: string[] = [];
   const warnings: string[] = [];
+
+  // Exclude stores where none of the requested items are available.
+  // Fall back to showing all if no store has any stock (so users see a meaningful empty state).
+  const withStock = ranked.filter((s) => s.stockCoverageScore > 0);
+  const pool = withStock.length > 0 ? withStock : ranked;
+  const top = pool.slice(0, maxResults);
 
   if (top.length === 0) {
     warnings.push("No stores found with any of the requested items in stock.");
     return { ranked: top, explanationPoints, warnings };
+  }
+
+  if (withStock.length === 0) {
+    warnings.push("This item appears to be out of stock at all nearby stores.");
   }
 
   const best = top[0];

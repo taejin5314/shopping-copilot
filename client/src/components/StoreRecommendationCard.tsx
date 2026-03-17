@@ -44,8 +44,9 @@ function buildWhy(s: RankedStore, pts: string[]): string[] {
   if (pts.length > 0) return pts.slice(0, 3);
   const out: string[] = [];
   const { label: sl, cls } = stockInfo(s);
-  if (cls === "val-ok")  out.push(sl !== "—" ? sl : "All items in stock");
-  else if (sl !== "—")   out.push(`${sl} available`);
+  // Only add a positive stock point when items are actually available.
+  if (cls === "val-ok" && sl !== "—")  out.push(sl);
+  else if (cls === "val-partial" && sl !== "—" && !sl.startsWith("0")) out.push(`${sl} available`);
   const d = approxDist(s);
   if (d) out.push(`About ${d} away`);
   if ((s.priceScore ?? 0) > 0.7) out.push("Competitive pricing");
