@@ -1,0 +1,81 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  REGION: us-central1
+  SERVICE: shopilot
+  REGISTRY: us-central1-docker.pkg.dev
+
+# ── GCP 사전 설정 (최초 1회) ─────────────────────────────────────────────────
+#
+# 1. GCP Console에서 프로젝트 생성 후 아래 API 활성화:
+#    Cloud Run API, Cloud Build API, Artifact Registry API,
+#    IAM Credentials API, Secret Manager API
+#
+# 2. Artifact Registry 저장소 생성:
+#    gcloud artifacts repositories create shopilot \
+#      --repository-format=docker --location=us-central1 \
+#      --project=YOUR_PROJECT_ID
+#
+# 3. Workload Identity Federation 설정 (서비스 계정 키 없이 인증):
+#    https://github.com/google-github-actions/auth#setting-up-workload-identity-federation
+#
+# 4. GitHub 리포 Settings > Secrets and variables > Actions 에서 등록:
+#    GCP_PROJECT_ID       — GCP 프로젝트 ID (예: shopilot-123456)
+#    WIF_PROVIDER         — projects/NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER
+#    WIF_SERVICE_ACCOUNT  — deploy-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+#
+# 5. Secret Manager에 API 키 등록:
+#    gcloud secrets create ANTHROPIC_API_KEY --project=YOUR_PROJECT_ID
+#    echo -n "sk-ant-..." | gcloud secrets versions add ANTHROPIC_API_KEY --data-file=-
+#    # MCP_API_KEY가 없으면 아래 secrets: 블록에서 제거하세요
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # Workload Identity Federation 필요
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE }}/app"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}
+          env_vars: |
+            MCP_URL=http://localhost:3000
+          secrets: |
+            ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=5
+            --memory=512Mi
+            --cpu=1
+            --timeout=60

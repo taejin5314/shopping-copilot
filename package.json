@@ -1,5 +1,5 @@
 {
-  "name": "shopping-copilot",
+  "name": "shopilot",
   "version": "0.1.0",
   "description": "Retailer-agnostic shopping assistant with MCP tool integration, RAG, and deterministic recommendation logic.",
   "license": "MIT",

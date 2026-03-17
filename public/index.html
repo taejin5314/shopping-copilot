@@ -7,6 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<!-- Google Analytics 4 — GA_MEASUREMENT_ID를 실제 측정 ID로 교체하세요 (예: G-XXXXXXXXXX) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'GA_MEASUREMENT_ID');
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -873,7 +881,8 @@ function render(r) {
       // Whole card is the link when a URL is available — no nested <a> inside.
       const tag = p.url ? 'a' : 'div';
       const attrs = p.url ? `href="${esc(p.url)}" target="_blank" rel="noopener noreferrer"` : '';
-      return `<${tag} class="prod-card" ${attrs}>
+      const gaAttrs = `data-item-no="${esc(p.itemNo ?? '')}" data-item-name="${esc(p.name ?? '')}" data-retailer="${esc(p.retailer ?? '')}" data-price="${esc(String(p.price?.amount ?? ''))}" data-currency="${esc(p.price?.currency ?? '')}"`;
+      return `<${tag} class="prod-card" ${attrs} ${gaAttrs}>
         ${p.imageUrl ? `<img class="prod-img" src="${esc(p.imageUrl)}" alt="${esc(p.name)}" loading="lazy">` : ''}
         <div class="prod-body">
           ${price ? `<div class="prod-price">${esc(price)}</div>` : ''}
@@ -883,6 +892,16 @@ function render(r) {
         </div>
       </${tag}>`;
     }).join('');
+    // GA4 제품 클릭 이벤트 (select_item → BigQuery export로 학습 데이터 수집)
+    $('prod-grid').querySelectorAll('.prod-card').forEach(card => {
+      card.addEventListener('click', () => {
+        if (typeof gtag !== 'function') return;
+        const { itemNo, itemName, retailer, price, currency } = card.dataset;
+        const item = { item_id: itemNo, item_name: itemName, item_brand: retailer };
+        if (price) { item.price = parseFloat(price); item.currency = currency; }
+        gtag('event', 'select_item', { item_list_name: 'search_results', items: [item] });
+      });
+    });
     show('s-products');
   } else show('s-products', false);
 
