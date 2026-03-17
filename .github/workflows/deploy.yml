@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
 
 env:
-  REGION: us-central1
+  REGION: northamerica-northeast1
   SERVICE: shopilot
-  REGISTRY: us-central1-docker.pkg.dev
+  REGISTRY: northamerica-northeast1-docker.pkg.dev
 
 # ── GCP 사전 설정 (최초 1회) ─────────────────────────────────────────────────
 #
@@ -54,8 +54,11 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+        run: gcloud auth configure-docker northamerica-northeast1-docker.pkg.dev --quiet
 
       - name: Build and push image
         run: |
