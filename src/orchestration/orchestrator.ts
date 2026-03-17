@@ -159,7 +159,8 @@ export async function handleQuery(
       ? async () => {
           const cart = context?.cart ?? cartFromIntent(intent);
           if (cart.length === 0) {
-            warnings.push("No item numbers detected in the query. Please specify the item numbers you are looking for.");
+            // No item numbers — fall back to product search (unknown path below).
+            intent.type = "unknown";
             return;
           }
           try {
