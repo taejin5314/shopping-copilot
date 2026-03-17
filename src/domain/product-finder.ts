@@ -90,9 +90,12 @@ function pfLog(fields: Record<string, unknown>): void {
 const BASE_SCORE = 0.8;
 const ATTRIBUTE_HIT_BONUS = 0.05;
 const ATTRIBUTE_MISS_PENALTY = 0.15;
+const KEYWORD_MISS_PENALTY = 0.10; // per unmatched keyword
 const BUDGET_OVER_PENALTY = 0.25;
 const BUDGET_WAY_OVER_PENALTY = 0.50;
 const WEAK_MATCH_THRESHOLD = 0.5;
+/** Candidates below this score are filtered out entirely (wrong product type). */
+const MIN_SCORE_THRESHOLD = 0.4;
 
 // ── Main function ──
 
@@ -163,6 +166,12 @@ export async function findProducts(
   const candidates = deduplicateByItemNo(raw);
   const dedupRemoved = rawCount - candidates.length;
 
+  // Filter out candidates that clearly don't match the query.
+  const filtered = candidates.filter((c) => c.matchScore >= MIN_SCORE_THRESHOLD);
+  const filterRemoved = candidates.length - filtered.length;
+  candidates.length = 0;
+  candidates.push(...filtered);
+
   // Sort by score descending.
   candidates.sort((a, b) => b.matchScore - a.matchScore);
 
@@ -184,6 +193,7 @@ export async function findProducts(
     rawCount,
     candidateCount: candidates.length,
     dedupRemoved,
+    filterRemoved,
     scoreHigh,
     scoreMid,
     scoreLow,
@@ -307,6 +317,11 @@ function scoreCandidate(
   const matchedKws = keywords.filter((kw) => productText.includes(kw.toLowerCase()));
 
   if (!quOutput) return { score, matchedKws };
+
+  // Keyword miss penalty: each unmatched keyword lowers the score.
+  // Catches wrong product types (e.g. "desk lamp" when searching "white desk").
+  const missCount = keywords.length - matchedKws.length;
+  if (missCount > 0) score -= missCount * KEYWORD_MISS_PENALTY;
 
   // Attribute scoring.
   const attributes: Array<[string | null, string]> = [

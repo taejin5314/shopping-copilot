@@ -265,16 +265,23 @@ function buildStoreStock(
   regionId: number | undefined,
   cart?: Array<{ itemNo: string; quantity: number }>,
 ): StoreStock {
-  const stockMap = regionId ? regionStock.get(regionId) : undefined;
+  // Use != null (not truthiness) so regionId=0 is not skipped.
+  const stockMap = regionId != null ? regionStock.get(regionId) : undefined;
   return {
     store,
     items: skus.map((sku) => {
       const inv = stockMap?.get(sku);
       const requested = cart?.find((c) => c.itemNo === sku)?.quantity ?? 1;
+      // Structube exposes status ("IN_STOCK"/"OUT_OF_STOCK") but often omits exact quantity.
+      // quantity >= requested would evaluate null >= 1 = false, hiding in-stock items.
+      // Use status as the primary signal; show quantity only when positive.
+      const inStock = inv?.status === "IN_STOCK";
+      const qty = (inv?.quantity != null && inv.quantity > 0) ? inv.quantity : null;
+      const available = inv !== undefined ? (qty !== null ? qty >= requested : inStock) : false;
       return {
         itemNo: sku,
-        available: inv !== undefined ? inv.quantity >= requested : false,
-        quantity: inv?.quantity ?? null,
+        available,
+        quantity: qty,
         stockLevel: inv?.status ?? "UNKNOWN",
         canNotify: null,
       };

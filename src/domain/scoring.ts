@@ -49,12 +49,17 @@ export function scoreStore(
 ): ScoredStore {
   const itemDetails: ItemScoreDetail[] = cart.map((cartItem) => {
     const match = storeStock.items.find((a) => a.itemNo === cartItem.itemNo);
-    const available = match?.quantity ?? null;
+    const qty = match?.quantity ?? null;
+    // When quantity is unknown (e.g. Structube doesn't expose counts), fall back
+    // to the boolean `available` flag set by the adapter from status fields.
+    const sufficient = qty !== null
+      ? qty >= cartItem.quantity
+      : (match?.available ?? false);
     return {
       itemNo: cartItem.itemNo,
       requested: cartItem.quantity,
-      available,
-      sufficient: available !== null && available >= cartItem.quantity,
+      available: qty,
+      sufficient,
     };
   });
 
