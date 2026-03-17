@@ -1,11 +1,19 @@
 # ── build stage ──
 FROM node:20-slim AS build
 WORKDIR /app
+
+# Backend deps + build
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
+
+# Client (React) build → outputs to public/
+COPY client/package.json client/package-lock.json ./client/
+RUN cd client && npm ci
+COPY client/ ./client/
+RUN cd client && npm run build
 
 # ── runtime stage ──
 FROM node:20-slim

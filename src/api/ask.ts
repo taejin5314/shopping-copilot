@@ -13,6 +13,8 @@ import type { GeocodeOptions } from "../domain/geocode.js";
 import { routeQuery } from "../llm/router.js";
 import { runQueryUnderstanding } from "../llm/query-understanding.js";
 import type { CaptureExporter } from "../capture/capture-exporter.js";
+import { logEvent } from "../events/event-logger.js";
+import { applyQueryRewrites } from "../domain/query-rewrites.js";
 
 // ──────────────────────────────────────────────
 // API entrypoint — single function surface
@@ -64,8 +66,10 @@ export interface CopilotConfig {
 export async function ask(
   rawInput: unknown,
   config: CopilotConfig,
+  sessionId?: string,
 ): Promise<CopilotResponse> {
   const _t0 = performance.now();
+  const sid = sessionId ?? "unknown";
   const perf = (label: string, since: number) =>
     console.error(`[perf][ask] ${label}: ${Math.round(performance.now() - since)}ms`);
 
@@ -77,7 +81,23 @@ export async function ask(
     );
   }
 
-  const { query, retailer: retailerKey, countryCode, locationText, location, radiusKm, cart } = parsed.data;
+  const { query: rawQuery, retailer: retailerKey, countryCode, locationText, location, radiusKm, cart } = parsed.data;
+
+  // Apply query rewrites before anything else (QU, Router, orchestrator).
+  const REWRITES_ENABLED = process.env.ENABLE_QUERY_REWRITES === "true";
+  const { rewritten: query, didRewrite } = REWRITES_ENABLED
+    ? applyQueryRewrites(rawQuery)
+    : { rewritten: rawQuery, didRewrite: false };
+
+  if (didRewrite) {
+    logEvent({
+      event_type: "query_rewritten",
+      session_id: sid,
+      ts: new Date().toISOString(),
+      query_text: rawQuery,
+      rewritten_to: query,
+    });
+  }
 
   // Router, Query Understanding, and geocoding run in parallel to avoid sequential latency.
   const _tRouter = performance.now();
@@ -133,6 +153,7 @@ export async function ask(
     const response = await queryAll(allEntries, query, config, context, perf);
     response.warnings = [...warnings, ...response.warnings];
     perf("total", _t0);
+    emitQueryEvents(sid, rawQuery, response, resolvedRetailerKey, countryCode, radiusKm, _t0);
     return response;
   }
 
@@ -153,7 +174,56 @@ export async function ask(
   // Prepend geocode warnings so they appear first.
   response.warnings = [...warnings, ...response.warnings];
   perf("total", _t0);
+  emitQueryEvents(sid, rawQuery, response, resolvedRetailerKey, countryCode, radiusKm, _t0);
   return response;
+}
+
+function emitQueryEvents(
+  sessionId: string,
+  query: string,
+  response: CopilotResponse,
+  retailerRouted: string | undefined,
+  countryCode: string | undefined,
+  radiusKm: number | undefined,
+  t0: number,
+): void {
+  const ts = new Date().toISOString();
+  const responseMs = Math.round(performance.now() - t0);
+  const resultCount = response.products?.length ?? 0;
+
+  logEvent({
+    event_type: "query_submitted",
+    session_id: sessionId,
+    ts,
+    query_text: query,
+    intent_detected: response.intent?.type,
+    retailer_routed: retailerRouted ?? "all",
+    response_ms: responseMs,
+    result_count: resultCount,
+    country_code: countryCode,
+    radius_km: radiusKm,
+  });
+
+  if (resultCount > 0) {
+    logEvent({
+      event_type: "result_shown",
+      session_id: sessionId,
+      ts,
+      query_text: query,
+      intent_detected: response.intent?.type,
+      retailer_routed: retailerRouted ?? "all",
+      result_count: resultCount,
+    });
+  } else {
+    logEvent({
+      event_type: "no_results_shown",
+      session_id: sessionId,
+      ts,
+      query_text: query,
+      intent_detected: response.intent?.type,
+      retailer_routed: retailerRouted ?? "all",
+    });
+  }
 }
 
 function resolveRetailer(

@@ -263,14 +263,15 @@ export async function handleQuery(
             finderCandidates = finderResult.candidates;
             foundProducts = finderResult.candidates.map(candidateToProductInfo);
           } else {
-            warnings.push("Could not find products matching your query. Try asking about stock availability, store comparison, or return policies.");
+            console.error("[orchestrator] product-finder returned 0 candidates, falling back to Route B");
           }
         } catch (err) {
           console.error("[orchestrator] product finder failed:", err);
-          warnings.push("Could not determine the intent of your question. Try asking about stock availability, store comparison, or return policies.");
         }
-      } else {
-        // ── Route B: Existing path ──
+      }
+
+      if (foundProducts.length === 0) {
+        // ── Route B: Existing path (also used as fallback when Route A returns 0) ──
         // Step 1: domain-aware pre-normalization
         const norm = normalizeForRetail(query);
         let searchQuery = norm.normalizedQuery;
