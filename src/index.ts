@@ -5,6 +5,8 @@ export { IkeaAdapter } from "./retailers/ikea/adapter.js";
 export type { IkeaAdapterConfig } from "./retailers/ikea/adapter.js";
 export { StructubeAdapter } from "./retailers/structube/adapter.js";
 export type { StructubeAdapterConfig } from "./retailers/structube/adapter.js";
+export { SephoraAdapter } from "./retailers/sephora/adapter.js";
+export { ShoppersAdapter } from "./retailers/shoppers/adapter.js";
 export { StubRetriever } from "./rag/retriever.js";
 export { KeywordRetriever } from "./rag/keyword-retriever.js";
 export { IKEA_CORPUS } from "./rag/corpus.js";
